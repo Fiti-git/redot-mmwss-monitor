@@ -1,10 +1,5 @@
 # MMWSS stack — separate from the existing callora stack.
-# Lives on the same EC2 host but uses its own Docker network,
-# its own Postgres (NOT shared with callora-db), and its own Redis.
-#
-# Bring up:    cd /srv/mmwss && docker compose -f ops/docker-compose.yml up -d --build
-# Tail logs:   docker compose -f ops/docker-compose.yml logs -f
-# Tear down:   docker compose -f ops/docker-compose.yml down  (add -v to wipe DB)
+# Lives on the same EC2 host but uses its own Docker network and its own Postgres.
 
 x-logging: &default-logging
   driver: json-file
@@ -16,10 +11,15 @@ networks:
   mmwss_net:
     name: mmwss_net
     driver: bridge
+  # Attached to callora's network too so caddy (in callora stack) can reach mmwss-app
+  repo_default:
+    external: true
 
 volumes:
   mmwss_pgdata:
     name: mmwss_pgdata
+  mmwss_reports:
+    name: mmwss_reports
 
 services:
   db:
@@ -34,7 +34,6 @@ services:
     volumes:
       - mmwss_pgdata:/var/lib/postgresql/data
     ports:
-      # Bound to loopback only; never reachable from internet.
       - "127.0.0.1:5434:5432"
     networks:
       - mmwss_net
@@ -42,8 +41,6 @@ services:
       resources:
         limits:
           memory: 512m
-        reservations:
-          memory: 128m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mmwss -d mmwss"]
       interval: 5s
@@ -68,12 +65,35 @@ services:
         condition: service_healthy
     networks:
       - mmwss_net
+    volumes:
+      - mmwss_reports:/app/reports
     deploy:
       resources:
         limits:
           memory: 256m
-        reservations:
-          memory: 64m
-    # Default command in the image is "scheduler", which runs migrate+sync once
-    # then idles with a 10-min heartbeat. Slice 2 will swap the idle loop for
-    # APScheduler with hourly analytics, 60s uptime probes, daily reports.
+
+  app:
+    build:
+      context: ../app
+      dockerfile: Dockerfile
+    image: mmwss/app:latest
+    container_name: mmwss-app
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DATABASE_URL: postgresql://mmwss:${MMWSS_DB_PASSWORD}@db:5432/mmwss?schema=mmwss
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://coldcalling.redotglobal.agency/mmwss}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - mmwss_net
+      - repo_default      # so callora-caddy can resolve "mmwss-app" by name
+    volumes:
+      - mmwss_reports:/app/reports:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512m

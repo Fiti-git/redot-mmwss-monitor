@@ -9,7 +9,11 @@ import logging
 import sys
 import time
 
-from . import db
+from apscheduler.schedulers.blocking import BlockingScheduler
+from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+
+from . import db, jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -43,23 +47,54 @@ def cmd_sync(settings) -> int:
     return 0
 
 
-def cmd_scheduler(settings) -> int:
-    """Phase 1 stub: run migrate + sync once, then idle.
+def _wrap(fn, settings, name):
+    """Run a job within its own DB connection + log exceptions, never raise to APScheduler."""
+    def job():
+        try:
+            with db.connect(settings.database_url) as conn:
+                t = time.monotonic()
+                result = fn(settings, conn)
+                log.info("job %s done in %.1fs result=%s", name, time.monotonic() - t, result)
+        except Exception:
+            log.exception("job %s failed", name)
+    return job
 
-    Idling (rather than exiting) is deliberate. With `restart: unless-stopped`,
-    exiting would cause a hot restart loop and hammer the CF API. Slice 2 replaces
-    this with an APScheduler instance running the real jobs.
-    """
-    log.info("Scheduler stub — running one-shot migrate + sync")
+
+def cmd_scheduler(settings) -> int:
+    """Long-running scheduler. Runs jobs on cron-like schedules."""
+    log.info("Scheduler starting — running initial migrate + sync")
     rc = cmd_sync(settings)
     if rc != 0:
-        log.error("Initial sync failed (rc=%d). Sleeping 5min before letting Docker restart us.", rc)
+        log.error("Initial sync failed (rc=%d). Sleeping 5min before exiting.", rc)
         time.sleep(300)
         return rc
-    log.info("Initial sync OK. Idling (real APScheduler jobs land in slice 2). Heartbeat every 10min.")
-    while True:
-        time.sleep(600)
-        log.info("scheduler heartbeat — still alive")
+
+    # Initial pulls so the dashboard isn't empty on first deploy
+    log.info("Running initial analytics pull and snapshot")
+    try:
+        with db.connect(settings.database_url) as conn:
+            jobs.pull_analytics_hourly(settings, conn)
+            jobs.take_snapshot(settings, conn)
+            jobs.probe_uptime(settings, conn)
+    except Exception:
+        log.exception("initial jobs failed (continuing to scheduler)")
+
+    sched = BlockingScheduler(timezone="UTC")
+    sched.add_job(_wrap(jobs.probe_uptime, settings, "probe_uptime"),
+                  IntervalTrigger(seconds=60), id="uptime", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(jobs.pull_analytics_hourly, settings, "pull_analytics_hourly"),
+                  CronTrigger(minute=5), id="analytics", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(jobs.take_snapshot, settings, "take_snapshot"),
+                  CronTrigger(hour="*/6", minute=10), id="snapshot", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(sync_all_zones, settings, "sync_zones"),
+                  CronTrigger(hour=2, minute=0), id="zone_sync", max_instances=1, coalesce=True)
+
+    log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily")
+    try:
+        sched.start()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Scheduler stopping")
+    return 0
 
 
 COMMANDS = {

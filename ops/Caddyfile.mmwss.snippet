@@ -1,0 +1,18 @@
+# Snippet to add to the existing callora Caddyfile (/srv/callora/repo/Caddyfile)
+# INSIDE the {$PUBLIC_DOMAIN:coldcalling.redotglobal.agency} site block,
+# BEFORE the catch-all `handle { reverse_proxy frontend:3000 }`.
+#
+# After adding it, reload Caddy:
+#   sudo docker exec callora-caddy caddy reload --config /etc/caddy/Caddyfile
+#
+# Or if Caddy is mounted from a host file:
+#   sudo systemctl reload callora-caddy   # depending on how it's run
+
+handle /mmwss/* {
+    reverse_proxy mmwss-app:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
