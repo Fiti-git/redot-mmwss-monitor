@@ -76,6 +76,14 @@ def datetime_str(dt) -> str:
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
+def isoformat(dt) -> str | None:
+    if dt is None:
+        return None
+    if hasattr(dt, "isoformat"):
+        return dt.isoformat()
+    return str(dt)
+
+
 def register(env) -> None:
     env.filters["human_bytes"] = human_bytes
     env.filters["fmt_int"] = fmt_int
@@ -83,3 +91,4 @@ def register(env) -> None:
     env.filters["time_ago"] = time_ago
     env.filters["date_only"] = date_only
     env.filters["datetime_str"] = datetime_str
+    env.filters["isoformat"] = isoformat

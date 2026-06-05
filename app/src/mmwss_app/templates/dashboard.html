@@ -133,10 +133,10 @@
 {% if traffic %}
 <script>
 (function(){
-  const labels = {{ traffic | map(attribute='hour') | list | tojson }};
-  const requests = {{ traffic | map(attribute='requests') | list | tojson }};
-  const cached   = {{ traffic | map(attribute='cached') | list | tojson }};
-  const threats  = {{ traffic | map(attribute='threats') | list | tojson }};
+  const labels = {{ traffic | map(attribute='hour') | map('isoformat') | list | tojson }};
+  const requests = {{ traffic | map(attribute='requests') | map('int') | list | tojson }};
+  const cached   = {{ traffic | map(attribute='cached') | map('int') | list | tojson }};
+  const threats  = {{ traffic | map(attribute='threats') | map('int') | list | tojson }};
 
   const ctx = document.getElementById('overviewChart').getContext('2d');
   new Chart(ctx, {
