@@ -74,6 +74,6 @@ services:
           memory: 256m
         reservations:
           memory: 64m
-    # For Phase 1 slice 1: run "sync" once and exit. Restart policy will loop it,
-    # but we'll override the command to "scheduler" once that has real cron jobs.
-    command: ["sync"]
+    # Default command in the image is "scheduler", which runs migrate+sync once
+    # then idles with a 10-min heartbeat. Slice 2 will swap the idle loop for
+    # APScheduler with hourly analytics, 60s uptime probes, daily reports.

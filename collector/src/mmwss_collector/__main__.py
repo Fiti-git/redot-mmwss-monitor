@@ -7,6 +7,7 @@ Subcommands:
 """
 import logging
 import sys
+import time
 
 from . import db
 from .config import load
@@ -43,13 +44,22 @@ def cmd_sync(settings) -> int:
 
 
 def cmd_scheduler(settings) -> int:
-    """Phase 1 stub: just runs migrate + sync once, then exits.
-    Scheduler proper (APScheduler with hourly/6h/daily jobs) comes in the next slice.
+    """Phase 1 stub: run migrate + sync once, then idle.
+
+    Idling (rather than exiting) is deliberate. With `restart: unless-stopped`,
+    exiting would cause a hot restart loop and hammer the CF API. Slice 2 replaces
+    this with an APScheduler instance running the real jobs.
     """
     log.info("Scheduler stub — running one-shot migrate + sync")
     rc = cmd_sync(settings)
-    log.info("Scheduler stub done. Exiting with rc=%d", rc)
-    return rc
+    if rc != 0:
+        log.error("Initial sync failed (rc=%d). Sleeping 5min before letting Docker restart us.", rc)
+        time.sleep(300)
+        return rc
+    log.info("Initial sync OK. Idling (real APScheduler jobs land in slice 2). Heartbeat every 10min.")
+    while True:
+        time.sleep(600)
+        log.info("scheduler heartbeat — still alive")
 
 
 COMMANDS = {

@@ -61,32 +61,19 @@ def apply_pending_migrations(conn: psycopg.Connection, directory: Path = MIGRATI
 
 
 def upsert_cf_token(conn: psycopg.Connection, *, label: str, token: str, master_key: str) -> int:
-    """Insert or update a CF token row. Returns the cf_tokens.id."""
+    """Insert or update a CF token row (one per label). Returns the cf_tokens.id."""
     last_4 = token[-4:]
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO mmwss.cf_tokens (label, encrypted_token, last_4)
             VALUES (%s, pgp_sym_encrypt(%s, %s), %s)
-            ON CONFLICT DO NOTHING
+            ON CONFLICT (label) DO UPDATE SET
+                encrypted_token = EXCLUDED.encrypted_token,
+                last_4 = EXCLUDED.last_4
             RETURNING id
             """,
             (label, token, master_key, last_4),
-        )
-        row = cur.fetchone()
-        if row:
-            conn.commit()
-            return row["id"]
-        # Already exists with same label — update encrypted token (rotation case)
-        cur.execute(
-            """
-            UPDATE mmwss.cf_tokens
-            SET encrypted_token = pgp_sym_encrypt(%s, %s),
-                last_4 = %s
-            WHERE label = %s
-            RETURNING id
-            """,
-            (token, master_key, last_4, label),
         )
         row = cur.fetchone()
         conn.commit()
