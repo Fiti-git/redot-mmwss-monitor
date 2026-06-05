@@ -1,0 +1,44 @@
+{% extends "_app_shell.html" %}
+{% block title %}Incidents — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-4">
+  <div>
+    <h1 class="text-2xl font-semibold text-ink">Incidents</h1>
+    <p class="text-sm text-ink-muted mt-1">Auto-detected from uptime probes and snapshots.</p>
+  </div>
+  <div class="bg-white border border-line rounded-lg shadow-sm overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-alt">
+        <tr>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Severity</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Site</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Type</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Summary</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Started</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in incidents %}
+          {% set sev_class = {'critical': 'bg-brand-50 text-brand-700', 'warning': 'bg-amber-50 text-amber-700', 'info': 'bg-blue-50 text-blue-700'}[i.severity] %}
+          <tr class="border-t border-line">
+            <td class="px-5 py-3 text-xs">
+              <span class="px-2 py-0.5 rounded font-medium uppercase tracking-wide {{ sev_class }}">{{ i.severity }}</span>
+            </td>
+            <td class="px-5 py-3 text-sm"><a href="{{ base_path }}/zones/{{ i.zone_id }}" class="text-ink font-medium hover:text-brand">{{ i.zone_name }}</a></td>
+            <td class="px-5 py-3 text-xs font-mono text-ink-muted">{{ i.type }}</td>
+            <td class="px-5 py-3 text-sm text-ink">{{ i.summary }}</td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ i.started_at | datetime_str }}</td>
+            <td class="px-5 py-3 text-sm">
+              {% if i.ended_at %}<span class="text-emerald-600">resolved</span>{% else %}<span class="text-brand">open</span>{% endif %}
+            </td>
+          </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-5 py-12 text-center text-ink-muted">No incidents — all sites running smoothly.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

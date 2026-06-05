@@ -1,0 +1,60 @@
+{% extends "_app_shell.html" %}
+{% block title %}Settings — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-6">
+  <h1 class="text-2xl font-semibold text-ink">Settings</h1>
+
+  <div class="bg-white border border-line rounded-lg shadow-sm">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Users</h2></div>
+    <table class="w-full">
+      <thead class="bg-surface-alt">
+        <tr>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Email</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Name</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Role</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Active</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Last login</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-3 text-sm text-ink">{{ u.email }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted">{{ u.name }}</td>
+          <td class="px-5 py-3 text-sm"><span class="text-[10px] uppercase tracking-wide bg-surface-alt text-ink-muted px-1.5 py-0.5 rounded">{{ u.role }}</span></td>
+          <td class="px-5 py-3 text-sm">{{ 'yes' if u.is_active else 'no' }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted">{{ u.last_login_at | datetime_str }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-white border border-line rounded-lg shadow-sm">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Cloudflare tokens</h2></div>
+    <table class="w-full">
+      <thead class="bg-surface-alt">
+        <tr>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Label</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Last 4</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Added</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Last used</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tokens %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-3 text-sm text-ink font-medium">{{ t.label }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted font-mono">···{{ t.last_4 }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted">{{ t.created_at | datetime_str }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted">{{ t.last_used_at | datetime_str }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-xs text-ink-subtle">User invite and token rotation forms land in a follow-up slice. For now use the seed-admin script on the VPS.</p>
+</div>
+{% endblock %}

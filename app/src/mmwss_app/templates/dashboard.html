@@ -1,0 +1,71 @@
+{% extends "_app_shell.html" %}
+{% block title %}Overview — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-ink">Overview</h1>
+    <p class="text-sm text-ink-muted mt-1">All sites at a glance — last 24 hours.</p>
+  </div>
+
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    {% set kpis = [
+      ('Zones',             stats.zones,        false),
+      ('Requests (24h)',    stats.requests_24h, false),
+      ('Threats blocked',   stats.threats_24h,  stats.threats_24h > 0),
+      ('Open incidents',    stats.open_incidents, stats.open_incidents > 0),
+    ] %}
+    {% for label, value, accent in kpis %}
+    <div class="bg-white border border-line rounded-lg p-5 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-ink-muted">{{ label }}</div>
+      <div class="text-3xl font-semibold mt-2 {{ 'text-brand' if accent else 'text-ink' }}">{{ value | fmt_int }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white border border-line rounded-lg shadow-sm overflow-hidden">
+    <div class="px-5 py-4 border-b border-line flex items-center justify-between">
+      <h2 class="text-base font-semibold text-ink">Sites</h2>
+      <div class="text-xs text-ink-muted">{{ stats.bytes_24h | human_bytes }} served · {{ stats.hit_ratio | fmt_pct(0) }} cache hit</div>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-alt">
+        <tr>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Site</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Plan</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Uptime</th>
+          <th class="text-right text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Req (24h)</th>
+          <th class="text-right text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Threats</th>
+          <th class="text-right text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">SSL expires</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in zones %}
+        <tr class="border-t border-line hover:bg-surface-alt">
+          <td class="px-5 py-3"><a href="{{ base_path }}/zones/{{ z.id }}" class="text-ink font-medium hover:text-brand">{{ z.name }}</a></td>
+          <td class="px-5 py-3 text-sm text-ink-muted">{{ z.plan or '—' }}</td>
+          <td class="px-5 py-3 text-sm">
+            {% if z.uptime_ok is none %}
+              <span class="text-ink-subtle">no data</span>
+            {% elif z.uptime_ok %}
+              <span class="inline-flex items-center gap-1.5 text-emerald-600">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{{ z.latency_ms or '?' }}ms
+              </span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 text-brand">
+                <span class="w-1.5 h-1.5 rounded-full bg-brand"></span>DOWN
+              </span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3 text-sm text-ink text-right tabular-nums">{{ z.requests | fmt_int }}</td>
+          <td class="px-5 py-3 text-sm text-right tabular-nums {{ 'text-brand' if (z.threats or 0) > 0 else 'text-ink-muted' }}">{{ z.threats | fmt_int }}</td>
+          <td class="px-5 py-3 text-sm text-ink-muted text-right">{{ z.ssl_expiry | date_only }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-5 py-12 text-center text-ink-muted">No zones yet. The collector will populate this list shortly.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

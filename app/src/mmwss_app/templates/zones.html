@@ -1,0 +1,41 @@
+{% extends "_app_shell.html" %}
+{% block title %}Zones — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-4">
+  <h1 class="text-2xl font-semibold text-ink">Zones</h1>
+  <div class="bg-white border border-line rounded-lg shadow-sm overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-alt">
+        <tr>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Name</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Plan</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Status</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">SSL mode</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">Min TLS</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">FW rules</th>
+          <th class="text-left text-xs uppercase tracking-wide text-ink-muted font-medium px-5 py-3">SSL expires</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in zones %}
+          {% set s = z.settings_json or {} %}
+          <tr class="border-t border-line hover:bg-surface-alt">
+            <td class="px-5 py-3"><a href="{{ base_path }}/zones/{{ z.id }}" class="text-ink font-medium hover:text-brand">{{ z.name }}</a></td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ z.plan or '—' }}</td>
+            <td class="px-5 py-3 text-sm">
+              <span class="inline-flex items-center gap-1.5 text-emerald-600">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>{{ z.status }}
+              </span>
+            </td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ s.ssl or '—' }}</td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ s.min_tls_version or '—' }}</td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ z.fw_rules_enabled or 0 }} / {{ z.fw_rules_total or 0 }}</td>
+            <td class="px-5 py-3 text-sm text-ink-muted">{{ z.ssl_expiry | date_only }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

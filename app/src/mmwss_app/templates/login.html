@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Sign in — MMWSS{% endblock %}
+
+{% block body %}
+<div class="min-h-screen flex items-center justify-center bg-surface-alt px-4">
+  <div class="w-full max-w-md">
+    <div class="flex items-center justify-center mb-6 gap-3">
+      <div class="w-12 h-12 rounded-lg bg-brand flex items-center justify-center text-white font-bold text-2xl">R</div>
+      <div>
+        <div class="text-2xl font-bold text-ink leading-none">MMWSS</div>
+        <div class="text-xs text-ink-muted">by {{ company }}</div>
+      </div>
+    </div>
+    <div class="bg-white border border-line rounded-lg p-6 shadow-sm">
+      <h1 class="text-xl font-semibold text-ink mb-1">Sign in</h1>
+      <p class="text-sm text-ink-muted mb-6">Internal access only.</p>
+      <form method="post" action="{{ base_path }}/login" class="space-y-4">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div>
+          <label class="block text-sm font-medium text-ink mb-1">Email</label>
+          <input name="email" type="email" required autofocus autocomplete="email"
+                 class="w-full px-3 py-2 border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-ink">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-ink mb-1">Password</label>
+          <input name="password" type="password" required autocomplete="current-password"
+                 class="w-full px-3 py-2 border border-line rounded-md focus:outline-none focus:ring-2 focus:ring-brand focus:border-transparent text-ink">
+        </div>
+        {% if error %}
+        <div class="text-sm text-brand bg-brand-50 border border-brand-200 rounded-md px-3 py-2">{{ error }}</div>
+        {% endif %}
+        <button type="submit"
+                class="w-full bg-brand hover:bg-brand-600 text-white font-medium py-2.5 rounded-md transition">
+          Sign in
+        </button>
+      </form>
+    </div>
+    <p class="text-center text-xs text-ink-subtle mt-6">MMWSS · Security &amp; uptime monitoring</p>
+  </div>
+</div>
+{% endblock %}

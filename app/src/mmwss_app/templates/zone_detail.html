@@ -1,0 +1,158 @@
+{% extends "_app_shell.html" %}
+{% block title %}{{ zone.name }} — MMWSS{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block app_main %}
+{% set s = snapshot.settings_json if snapshot else {} %}
+{% set totals = {'req': 0, 'cached': 0, 'bytes': 0, 'threats': 0} %}
+{% for t in traffic %}
+  {% if totals.update({'req': totals.req + (t.requests or 0), 'cached': totals.cached + (t.cached_requests or 0), 'bytes': totals.bytes + (t.bytes or 0), 'threats': totals.threats + (t.threats or 0)}) %}{% endif %}
+{% endfor %}
+{% set hit = (totals.cached / totals.req * 100) if totals.req else 0 %}
+
+<div class="space-y-6">
+  <div>
+    <h1 class="text-2xl font-semibold text-ink">{{ zone.name }}</h1>
+    <p class="text-sm text-ink-muted mt-1">{{ zone.plan or '—' }} · {{ zone.status }}</p>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-ink-muted">Requests (24h)</div>
+      <div class="text-2xl font-semibold mt-1 text-ink tabular-nums">{{ totals.req | fmt_int }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-ink-muted">Cache hit</div>
+      <div class="text-2xl font-semibold mt-1 text-ink tabular-nums">{{ hit | fmt_pct(1) }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-ink-muted">Bandwidth (24h)</div>
+      <div class="text-2xl font-semibold mt-1 text-ink">{{ totals.bytes | human_bytes }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
+      <div class="text-xs uppercase tracking-wide text-ink-muted">Threats blocked</div>
+      <div class="text-2xl font-semibold mt-1 tabular-nums {{ 'text-brand' if totals.threats > 0 else 'text-ink' }}">{{ totals.threats | fmt_int }}</div>
+    </div>
+  </div>
+
+  {% if traffic %}
+  <div class="bg-white border border-line rounded-lg p-5 shadow-sm">
+    <h2 class="text-sm font-semibold text-ink mb-3">Traffic (last 24h, hourly)</h2>
+    <canvas id="traffic" height="80"></canvas>
+  </div>
+  <script>
+  (function(){
+    const labels = {{ traffic | map(attribute='hour') | list | tojson }};
+    const requests = {{ traffic | map(attribute='requests') | list | tojson }};
+    const cached   = {{ traffic | map(attribute='cached_requests') | list | tojson }};
+    const threats  = {{ traffic | map(attribute='threats') | list | tojson }};
+    const ctx = document.getElementById('traffic').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels.map(s => new Date(s).toLocaleTimeString([], {hour:'2-digit'})),
+        datasets: [
+          { label: 'Requests', data: requests, borderColor: '#1F1F1F', backgroundColor: 'rgba(31,31,31,0.05)', tension: 0.3, fill: true, pointRadius: 0 },
+          { label: 'Cached',   data: cached,   borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.05)', tension: 0.3, fill: true, pointRadius: 0 },
+          { label: 'Threats',  data: threats,  borderColor: '#E11E27', backgroundColor: 'rgba(225,30,39,0.06)',  tension: 0.3, fill: true, pointRadius: 0, yAxisID: 'y2' },
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
+        scales: {
+          y:  { beginAtZero: true, ticks: { font: { size: 10 } } },
+          y2: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { font: { size: 10 }, color: '#E11E27' } },
+          x:  { ticks: { font: { size: 10 } } }
+        }
+      }
+    });
+  })();
+  </script>
+  {% endif %}
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="bg-white border border-line rounded-lg shadow-sm">
+      <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Configuration</h2></div>
+      <div class="px-5 py-4 space-y-2 text-sm">
+        {% for k, v in [
+          ('SSL mode', s.ssl),
+          ('Always HTTPS', s.always_use_https),
+          ('Min TLS', s.min_tls_version),
+          ('Security level', s.security_level),
+          ('Brotli', s.brotli),
+          ('Cache level', s.cache_level),
+          ('Dev mode', s.development_mode),
+        ] %}
+        <div class="flex justify-between"><span class="text-ink-muted">{{ k }}</span><span class="text-ink font-medium">{{ v or '—' }}</span></div>
+        {% endfor %}
+        <div class="flex justify-between"><span class="text-ink-muted">Firewall rules</span><span class="text-ink font-medium">{{ snapshot.fw_rules_enabled or 0 if snapshot else 0 }} enabled / {{ snapshot.fw_rules_total or 0 if snapshot else 0 }}</span></div>
+      </div>
+    </div>
+    <div class="bg-white border border-line rounded-lg shadow-sm">
+      <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">SSL &amp; DNS</h2></div>
+      <div class="px-5 py-4 space-y-2 text-sm">
+        <div class="flex justify-between"><span class="text-ink-muted">SSL expiry</span><span class="text-ink font-medium">{{ snapshot.ssl_expiry | date_only if snapshot else '—' }}</span></div>
+        <div class="flex justify-between"><span class="text-ink-muted">Active cert packs</span><span class="text-ink font-medium">{{ snapshot.ssl_packs_active or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between"><span class="text-ink-muted">DNS records</span><span class="text-ink font-medium">{{ snapshot.dns_count or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between"><span class="text-ink-muted">Proxied</span><span class="text-ink font-medium">{{ snapshot.dns_proxied_count or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between"><span class="text-ink-muted">Uptime (24h)</span><span class="text-ink font-medium">{{ uptime_sum.pct | fmt_pct(2) }} ({{ uptime_sum.ok }}/{{ uptime_sum.total }})</span></div>
+        <div class="flex justify-between"><span class="text-ink-muted">Avg latency</span><span class="text-ink font-medium">{% if uptime_sum.avg_latency %}{{ uptime_sum.avg_latency | round | int }} ms{% else %}—{% endif %}</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-lg shadow-sm">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Recent uptime probes</h2></div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-xs uppercase tracking-wide text-ink-muted">
+        <th class="text-left px-5 py-2">When</th>
+        <th class="text-left px-5 py-2">Status</th>
+        <th class="text-right px-5 py-2">Latency</th>
+        <th class="text-left px-5 py-2">Error</th>
+      </tr></thead>
+      <tbody>
+        {% for u in uptime %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-2 text-ink-muted">{{ u.checked_at | datetime_str }}</td>
+          <td class="px-5 py-2 {{ 'text-emerald-600' if u.ok else 'text-brand' }}">{{ u.status_code or ('OK' if u.ok else 'ERR') }}</td>
+          <td class="px-5 py-2 text-right tabular-nums text-ink-muted">{{ u.latency_ms or '—' }} ms</td>
+          <td class="px-5 py-2 text-xs text-ink-muted truncate max-w-xs">{{ u.error_message or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="px-5 py-6 text-center text-ink-muted">No probes yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-white border border-line rounded-lg shadow-sm">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-sm font-semibold text-ink">DNS records ({{ dns_records | length }})</h2>
+    </div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-xs uppercase tracking-wide text-ink-muted">
+        <th class="text-left px-5 py-2">Type</th>
+        <th class="text-left px-5 py-2">Name</th>
+        <th class="text-left px-5 py-2">Content</th>
+        <th class="text-left px-5 py-2">Proxied</th>
+      </tr></thead>
+      <tbody>
+        {% for r in dns_records[:50] %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-2 font-mono text-xs text-ink">{{ r.type }}</td>
+          <td class="px-5 py-2 text-ink-muted">{{ r.name }}</td>
+          <td class="px-5 py-2 text-ink-muted font-mono text-xs truncate max-w-md">{{ r.content }}</td>
+          <td class="px-5 py-2 text-xs">{% if r.proxied %}<span class="text-brand">orange</span>{% else %}<span class="text-ink-subtle">direct</span>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="px-5 py-6 text-center text-ink-muted">No snapshot yet — collector will run shortly</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
