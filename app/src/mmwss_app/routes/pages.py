@@ -14,9 +14,12 @@ templates: Jinja2Templates = None  # type: ignore  set in main
 def dashboard(request: Request, user: dict = Depends(auth.require_user)):
     stats = queries.overview_stats()
     zones = queries.zones_with_status()
+    traffic = queries.overview_traffic_24h()
+    uptime = queries.overview_uptime_24h()
     return templates.TemplateResponse(
         "dashboard.html",
-        {"request": request, "user": user, "stats": stats, "zones": zones, "active": "dashboard"},
+        {"request": request, "user": user, "stats": stats, "zones": zones,
+         "traffic": traffic, "uptime": uptime, "active": "dashboard"},
     )
 
 

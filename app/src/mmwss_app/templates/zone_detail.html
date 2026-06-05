@@ -8,151 +8,205 @@
 {% block app_main %}
 {% set s = snapshot.settings_json if snapshot else {} %}
 {% set totals = {'req': 0, 'cached': 0, 'bytes': 0, 'threats': 0} %}
-{% for t in traffic %}
-  {% if totals.update({'req': totals.req + (t.requests or 0), 'cached': totals.cached + (t.cached_requests or 0), 'bytes': totals.bytes + (t.bytes or 0), 'threats': totals.threats + (t.threats or 0)}) %}{% endif %}
-{% endfor %}
+{% for t in traffic %}{% if totals.update({'req': totals.req + (t.requests or 0), 'cached': totals.cached + (t.cached_requests or 0), 'bytes': totals.bytes + (t.bytes or 0), 'threats': totals.threats + (t.threats or 0)}) %}{% endif %}{% endfor %}
 {% set hit = (totals.cached / totals.req * 100) if totals.req else 0 %}
 
-<div class="space-y-6">
-  <div>
-    <h1 class="text-2xl font-semibold text-ink">{{ zone.name }}</h1>
-    <p class="text-sm text-ink-muted mt-1">{{ zone.plan or '—' }} · {{ zone.status }}</p>
+<div class="space-y-6 max-w-[1400px]">
+  <!-- Page header -->
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <div class="flex items-center gap-2 text-[12px] text-ink-muted mb-1">
+        <a href="{{ base_path }}/zones" class="hover:text-brand">Zones</a>
+        <span>/</span>
+        <span class="text-ink">{{ zone.name }}</span>
+      </div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">{{ zone.name }}</h1>
+      <div class="flex items-center gap-3 mt-1.5">
+        <span class="inline-flex items-center gap-1.5 text-[12px] text-ok-dark font-medium bg-ok-soft px-2 py-0.5 rounded">
+          <span class="w-1.5 h-1.5 rounded-full bg-ok"></span>{{ zone.status }}
+        </span>
+        <span class="text-[12px] text-ink-muted">{{ zone.plan or '—' }}</span>
+        <span class="text-[12px] text-ink-subtle">Last synced {{ zone.last_synced_at | time_ago }}</span>
+      </div>
+    </div>
+    <a href="https://{{ zone.name }}" target="_blank"
+       class="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-muted hover:text-brand bg-white border border-line hover:border-brand-300 rounded-lg px-3 py-1.5 transition-colors">
+      Visit site
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3"/></svg>
+    </a>
   </div>
 
+  <!-- KPI cards -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
-      <div class="text-xs uppercase tracking-wide text-ink-muted">Requests (24h)</div>
-      <div class="text-2xl font-semibold mt-1 text-ink tabular-nums">{{ totals.req | fmt_int }}</div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Requests (24h)</div>
+      <div class="text-[26px] font-bold mt-2.5 tabular text-ink tracking-tight">{{ totals.req | fmt_int }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ totals.bytes | human_bytes }} served</div>
     </div>
-    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
-      <div class="text-xs uppercase tracking-wide text-ink-muted">Cache hit</div>
-      <div class="text-2xl font-semibold mt-1 text-ink tabular-nums">{{ hit | fmt_pct(1) }}</div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Cache hit</div>
+      <div class="text-[26px] font-bold mt-2.5 tabular text-ok tracking-tight">{{ hit | fmt_pct(1) }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ totals.cached | fmt_int }} of {{ totals.req | fmt_int }}</div>
     </div>
-    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
-      <div class="text-xs uppercase tracking-wide text-ink-muted">Bandwidth (24h)</div>
-      <div class="text-2xl font-semibold mt-1 text-ink">{{ totals.bytes | human_bytes }}</div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Threats blocked</div>
+      <div class="text-[26px] font-bold mt-2.5 tabular {{ 'text-danger' if totals.threats > 0 else 'text-ink' }} tracking-tight">{{ totals.threats | fmt_int }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">last 24 hours</div>
     </div>
-    <div class="bg-white border border-line rounded-lg p-4 shadow-sm">
-      <div class="text-xs uppercase tracking-wide text-ink-muted">Threats blocked</div>
-      <div class="text-2xl font-semibold mt-1 tabular-nums {{ 'text-brand' if totals.threats > 0 else 'text-ink' }}">{{ totals.threats | fmt_int }}</div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Uptime (24h)</div>
+      <div class="text-[26px] font-bold mt-2.5 tabular text-{{ 'ok' if (uptime_sum.pct or 0) >= 99.9 else ('warn' if (uptime_sum.pct or 0) >= 99 else 'danger') }} tracking-tight">{{ uptime_sum.pct | fmt_pct(2) }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ uptime_sum.ok }} / {{ uptime_sum.total }} probes ok</div>
     </div>
   </div>
 
+  <!-- Traffic chart -->
   {% if traffic %}
-  <div class="bg-white border border-line rounded-lg p-5 shadow-sm">
-    <h2 class="text-sm font-semibold text-ink mb-3">Traffic (last 24h, hourly)</h2>
-    <canvas id="traffic" height="80"></canvas>
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-6 py-4 border-b border-line flex items-center justify-between">
+      <div>
+        <h2 class="text-[15px] font-semibold text-ink">Traffic, last 24h</h2>
+        <p class="text-[12px] text-ink-muted mt-0.5">Hourly buckets — requests, cached share, threats</p>
+      </div>
+      <div class="flex items-center gap-4 text-[11px] font-medium">
+        <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#0F172A"></span>Requests</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#10B981"></span>Cached</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm" style="background:#E11E27"></span>Threats</span>
+      </div>
+    </div>
+    <div class="p-5"><canvas id="trafficChart" height="80"></canvas></div>
   </div>
-  <script>
-  (function(){
-    const labels = {{ traffic | map(attribute='hour') | list | tojson }};
-    const requests = {{ traffic | map(attribute='requests') | list | tojson }};
-    const cached   = {{ traffic | map(attribute='cached_requests') | list | tojson }};
-    const threats  = {{ traffic | map(attribute='threats') | list | tojson }};
-    const ctx = document.getElementById('traffic').getContext('2d');
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: labels.map(s => new Date(s).toLocaleTimeString([], {hour:'2-digit'})),
-        datasets: [
-          { label: 'Requests', data: requests, borderColor: '#1F1F1F', backgroundColor: 'rgba(31,31,31,0.05)', tension: 0.3, fill: true, pointRadius: 0 },
-          { label: 'Cached',   data: cached,   borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.05)', tension: 0.3, fill: true, pointRadius: 0 },
-          { label: 'Threats',  data: threats,  borderColor: '#E11E27', backgroundColor: 'rgba(225,30,39,0.06)',  tension: 0.3, fill: true, pointRadius: 0, yAxisID: 'y2' },
-        ]
-      },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } },
-        scales: {
-          y:  { beginAtZero: true, ticks: { font: { size: 10 } } },
-          y2: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { font: { size: 10 }, color: '#E11E27' } },
-          x:  { ticks: { font: { size: 10 } } }
-        }
-      }
-    });
-  })();
-  </script>
   {% endif %}
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div class="bg-white border border-line rounded-lg shadow-sm">
-      <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Configuration</h2></div>
-      <div class="px-5 py-4 space-y-2 text-sm">
-        {% for k, v in [
-          ('SSL mode', s.ssl),
-          ('Always HTTPS', s.always_use_https),
-          ('Min TLS', s.min_tls_version),
-          ('Security level', s.security_level),
-          ('Brotli', s.brotli),
-          ('Cache level', s.cache_level),
-          ('Dev mode', s.development_mode),
+  <!-- Configuration + SSL grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+      <div class="px-6 py-3.5 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Cloudflare configuration</h2></div>
+      <div class="divide-y divide-line">
+        {% for label, value, danger_when in [
+          ('SSL mode', s.ssl, ['off','flexible']),
+          ('Always HTTPS', s.always_use_https, ['off']),
+          ('Minimum TLS', s.min_tls_version, ['1.0','1.1']),
+          ('Security level', s.security_level, ['essentially_off','off']),
+          ('Brotli compression', s.brotli, []),
+          ('Cache level', s.cache_level, []),
+          ('Development mode', s.development_mode, ['on']),
         ] %}
-        <div class="flex justify-between"><span class="text-ink-muted">{{ k }}</span><span class="text-ink font-medium">{{ v or '—' }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]">
+          <span class="text-ink-muted">{{ label }}</span>
+          <span class="font-mono text-[12.5px] {{ 'text-danger font-semibold' if (value|string) in danger_when else 'text-ink font-medium' }}">{{ value or '—' }}</span>
+        </div>
         {% endfor %}
-        <div class="flex justify-between"><span class="text-ink-muted">Firewall rules</span><span class="text-ink font-medium">{{ snapshot.fw_rules_enabled or 0 if snapshot else 0 }} enabled / {{ snapshot.fw_rules_total or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]">
+          <span class="text-ink-muted">Firewall rules</span>
+          <span class="font-medium text-ink">{{ snapshot.fw_rules_enabled or 0 if snapshot else 0 }} enabled / {{ snapshot.fw_rules_total or 0 if snapshot else 0 }} total</span>
+        </div>
       </div>
     </div>
-    <div class="bg-white border border-line rounded-lg shadow-sm">
-      <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">SSL &amp; DNS</h2></div>
-      <div class="px-5 py-4 space-y-2 text-sm">
-        <div class="flex justify-between"><span class="text-ink-muted">SSL expiry</span><span class="text-ink font-medium">{{ snapshot.ssl_expiry | date_only if snapshot else '—' }}</span></div>
-        <div class="flex justify-between"><span class="text-ink-muted">Active cert packs</span><span class="text-ink font-medium">{{ snapshot.ssl_packs_active or 0 if snapshot else 0 }}</span></div>
-        <div class="flex justify-between"><span class="text-ink-muted">DNS records</span><span class="text-ink font-medium">{{ snapshot.dns_count or 0 if snapshot else 0 }}</span></div>
-        <div class="flex justify-between"><span class="text-ink-muted">Proxied</span><span class="text-ink font-medium">{{ snapshot.dns_proxied_count or 0 if snapshot else 0 }}</span></div>
-        <div class="flex justify-between"><span class="text-ink-muted">Uptime (24h)</span><span class="text-ink font-medium">{{ uptime_sum.pct | fmt_pct(2) }} ({{ uptime_sum.ok }}/{{ uptime_sum.total }})</span></div>
-        <div class="flex justify-between"><span class="text-ink-muted">Avg latency</span><span class="text-ink font-medium">{% if uptime_sum.avg_latency %}{{ uptime_sum.avg_latency | round | int }} ms{% else %}—{% endif %}</span></div>
+    <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+      <div class="px-6 py-3.5 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">SSL &amp; DNS</h2></div>
+      <div class="divide-y divide-line">
+        <div class="flex justify-between px-6 py-2.5 text-[13px]"><span class="text-ink-muted">SSL expiry</span><span class="font-medium text-ink">{{ snapshot.ssl_expiry | date_only if snapshot else '—' }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]"><span class="text-ink-muted">Active cert packs</span><span class="font-medium text-ink">{{ snapshot.ssl_packs_active or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]"><span class="text-ink-muted">DNS records</span><span class="font-medium text-ink">{{ snapshot.dns_count or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]"><span class="text-ink-muted">Proxied records</span><span class="font-medium text-ink">{{ snapshot.dns_proxied_count or 0 if snapshot else 0 }}</span></div>
+        <div class="flex justify-between px-6 py-2.5 text-[13px]"><span class="text-ink-muted">Avg latency (24h)</span><span class="font-medium text-ink">{% if uptime_sum.avg_latency %}{{ uptime_sum.avg_latency | round | int }} ms{% else %}—{% endif %}</span></div>
       </div>
     </div>
   </div>
 
-  <div class="bg-white border border-line rounded-lg shadow-sm">
-    <div class="px-5 py-3 border-b border-line"><h2 class="text-sm font-semibold text-ink">Recent uptime probes</h2></div>
-    <table class="w-full text-sm">
-      <thead><tr class="text-xs uppercase tracking-wide text-ink-muted">
-        <th class="text-left px-5 py-2">When</th>
-        <th class="text-left px-5 py-2">Status</th>
-        <th class="text-right px-5 py-2">Latency</th>
-        <th class="text-left px-5 py-2">Error</th>
-      </tr></thead>
+  <!-- Recent probes -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-6 py-3.5 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Recent uptime probes</h2></div>
+    <table class="w-full text-[13px]">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-6 py-2.5">When</th>
+          <th class="text-left px-6 py-2.5">Status</th>
+          <th class="text-right px-6 py-2.5">Latency</th>
+          <th class="text-left px-6 py-2.5">Notes</th>
+        </tr>
+      </thead>
       <tbody>
         {% for u in uptime %}
         <tr class="border-t border-line">
-          <td class="px-5 py-2 text-ink-muted">{{ u.checked_at | datetime_str }}</td>
-          <td class="px-5 py-2 {{ 'text-emerald-600' if u.ok else 'text-brand' }}">{{ u.status_code or ('OK' if u.ok else 'ERR') }}</td>
-          <td class="px-5 py-2 text-right tabular-nums text-ink-muted">{{ u.latency_ms or '—' }} ms</td>
-          <td class="px-5 py-2 text-xs text-ink-muted truncate max-w-xs">{{ u.error_message or '' }}</td>
+          <td class="px-6 py-2 text-ink-muted">{{ u.checked_at | datetime_str }}</td>
+          <td class="px-6 py-2">
+            {% if u.ok %}
+            <span class="inline-flex items-center gap-1.5 text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>{{ u.status_code or 'OK' }}</span>
+            {% else %}
+            <span class="inline-flex items-center gap-1.5 text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger"></span>{{ u.status_code or 'ERR' }}</span>
+            {% endif %}
+          </td>
+          <td class="px-6 py-2 text-right tabular text-ink-muted">{{ u.latency_ms or '—' }} ms</td>
+          <td class="px-6 py-2 text-[12px] text-ink-muted truncate max-w-xs">{{ u.error_message or '' }}</td>
         </tr>
-        {% else %}
-        <tr><td colspan="4" class="px-5 py-6 text-center text-ink-muted">No probes yet</td></tr>
-        {% endfor %}
+        {% else %}<tr><td colspan="4" class="px-6 py-8 text-center text-ink-muted">No probes yet</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
 
-  <div class="bg-white border border-line rounded-lg shadow-sm">
-    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
-      <h2 class="text-sm font-semibold text-ink">DNS records ({{ dns_records | length }})</h2>
+  <!-- DNS records -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-6 py-3.5 border-b border-line flex justify-between items-center">
+      <h2 class="text-[15px] font-semibold text-ink">DNS records</h2>
+      <span class="text-[12px] text-ink-muted">{{ dns_records | length }} total · showing first 60</span>
     </div>
-    <table class="w-full text-sm">
-      <thead><tr class="text-xs uppercase tracking-wide text-ink-muted">
-        <th class="text-left px-5 py-2">Type</th>
-        <th class="text-left px-5 py-2">Name</th>
-        <th class="text-left px-5 py-2">Content</th>
-        <th class="text-left px-5 py-2">Proxied</th>
-      </tr></thead>
-      <tbody>
-        {% for r in dns_records[:50] %}
-        <tr class="border-t border-line">
-          <td class="px-5 py-2 font-mono text-xs text-ink">{{ r.type }}</td>
-          <td class="px-5 py-2 text-ink-muted">{{ r.name }}</td>
-          <td class="px-5 py-2 text-ink-muted font-mono text-xs truncate max-w-md">{{ r.content }}</td>
-          <td class="px-5 py-2 text-xs">{% if r.proxied %}<span class="text-brand">orange</span>{% else %}<span class="text-ink-subtle">direct</span>{% endif %}</td>
+    <table class="w-full text-[13px]">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-6 py-2.5">Type</th>
+          <th class="text-left px-6 py-2.5">Name</th>
+          <th class="text-left px-6 py-2.5">Content</th>
+          <th class="text-left px-6 py-2.5">Proxied</th>
         </tr>
-        {% else %}
-        <tr><td colspan="4" class="px-5 py-6 text-center text-ink-muted">No snapshot yet — collector will run shortly</td></tr>
-        {% endfor %}
+      </thead>
+      <tbody>
+        {% for r in dns_records[:60] %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-6 py-2"><span class="font-mono text-[11px] bg-surface-sunken text-ink px-1.5 py-0.5 rounded">{{ r.type }}</span></td>
+          <td class="px-6 py-2 text-ink-muted">{{ r.name }}</td>
+          <td class="px-6 py-2 font-mono text-[11.5px] text-ink-muted truncate max-w-md">{{ r.content }}</td>
+          <td class="px-6 py-2">{% if r.proxied %}<span class="text-[11px] font-semibold text-brand bg-brand-50 px-1.5 py-0.5 rounded">orange</span>{% else %}<span class="text-[11px] text-ink-subtle bg-surface-sunken px-1.5 py-0.5 rounded">direct</span>{% endif %}</td>
+        </tr>
+        {% else %}<tr><td colspan="4" class="px-6 py-8 text-center text-ink-muted">No snapshot yet — collector will run shortly</td></tr>{% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+
+{% if traffic %}
+<script>
+(function(){
+  const labels = {{ traffic | map(attribute='hour') | list | tojson }};
+  const requests = {{ traffic | map(attribute='requests') | list | tojson }};
+  const cached   = {{ traffic | map(attribute='cached_requests') | list | tojson }};
+  const threats  = {{ traffic | map(attribute='threats') | list | tojson }};
+  const ctx = document.getElementById('trafficChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels.map(s => new Date(s).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})),
+      datasets: [
+        { label: 'Requests', data: requests, borderColor: '#0F172A', backgroundColor: 'rgba(15,23,42,0.06)', borderWidth: 2, tension: 0.35, fill: true, pointRadius: 0, pointHoverRadius: 5 },
+        { label: 'Cached',   data: cached,   borderColor: '#10B981', backgroundColor: 'rgba(16,185,129,0.08)', borderWidth: 2, tension: 0.35, fill: true, pointRadius: 0, pointHoverRadius: 5 },
+        { label: 'Threats',  data: threats,  borderColor: '#E11E27', backgroundColor: 'rgba(225,30,39,0.1)',  borderWidth: 2, tension: 0.35, fill: true, pointRadius: 0, pointHoverRadius: 5, yAxisID: 'y2' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: '#0F172A', padding: 12, cornerRadius: 8, titleFont:{ size: 12, weight: '600' }, bodyFont:{ size: 12 } }
+      },
+      scales: {
+        x:  { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94A3B8', maxTicksLimit: 12 } },
+        y:  { beginAtZero: true, grid: { color: '#F1F3F6' }, ticks: { font: { size: 11 }, color: '#94A3B8', callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v } },
+        y2: { beginAtZero: true, position: 'right', grid: { display: false }, ticks: { font: { size: 11 }, color: '#E11E27' } }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

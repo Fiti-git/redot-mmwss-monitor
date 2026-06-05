@@ -33,6 +33,42 @@ def overview_stats() -> dict:
     }
 
 
+def overview_traffic_24h() -> list[dict]:
+    """Aggregate traffic across all zones, hourly buckets, last 24h."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    return db.fetch_all(
+        """
+        SELECT hour,
+               SUM(requests)::bigint        AS requests,
+               SUM(cached_requests)::bigint AS cached,
+               SUM(threats)::bigint         AS threats,
+               SUM(bytes)::bigint           AS bytes
+        FROM mmwss.analytics_hourly
+        WHERE hour >= %s
+        GROUP BY hour
+        ORDER BY hour
+        """,
+        (since,),
+    )
+
+
+def overview_uptime_24h() -> dict:
+    """Aggregate uptime % across all zones, last 24h."""
+    since = datetime.now(timezone.utc) - timedelta(hours=24)
+    r = db.fetch_one(
+        """
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE ok)::int AS ok
+        FROM mmwss.uptime_checks
+        WHERE checked_at >= %s
+        """,
+        (since,),
+    )
+    total = r["total"] or 0
+    ok = r["ok"] or 0
+    return {"total": total, "ok": ok, "pct": (ok / total * 100) if total else None}
+
+
 def zones_with_status() -> list[dict]:
     """Each zone with latest uptime, last snapshot, 24h traffic."""
     since = datetime.now(timezone.utc) - timedelta(hours=24)

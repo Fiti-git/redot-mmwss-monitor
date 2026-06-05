@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <rect width="256" height="256" rx="20" fill="#E11E27"/>
+  <!-- D-shape on the right -->
+  <path d="M 96 56 L 200 128 L 96 80 Z" fill="#FFFFFF"/>
+  <path d="M 96 200 L 200 128 L 96 176 Z" fill="#FFFFFF"/>
+  <path d="M 156 80 A 60 60 0 0 1 156 176 L 200 128 Z" fill="#FFFFFF"/>
+  <!-- Left play triangle -->
+  <path d="M 74 84 L 144 128 L 74 172 Z" fill="#FFFFFF"/>
+</svg>
