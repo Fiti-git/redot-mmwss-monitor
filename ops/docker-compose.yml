@@ -1,0 +1,79 @@
+# MMWSS stack — separate from the existing callora stack.
+# Lives on the same EC2 host but uses its own Docker network,
+# its own Postgres (NOT shared with callora-db), and its own Redis.
+#
+# Bring up:    cd /srv/mmwss && docker compose -f ops/docker-compose.yml up -d --build
+# Tail logs:   docker compose -f ops/docker-compose.yml logs -f
+# Tear down:   docker compose -f ops/docker-compose.yml down  (add -v to wipe DB)
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  mmwss_net:
+    name: mmwss_net
+    driver: bridge
+
+volumes:
+  mmwss_pgdata:
+    name: mmwss_pgdata
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mmwss-db
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: mmwss
+      POSTGRES_PASSWORD: ${MMWSS_DB_PASSWORD}
+      POSTGRES_DB: mmwss
+    volumes:
+      - mmwss_pgdata:/var/lib/postgresql/data
+    ports:
+      # Bound to loopback only; never reachable from internet.
+      - "127.0.0.1:5434:5432"
+    networks:
+      - mmwss_net
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+        reservations:
+          memory: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mmwss -d mmwss"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  collector:
+    build:
+      context: ../collector
+      dockerfile: Dockerfile
+    image: mmwss/collector:latest
+    container_name: mmwss-collector
+    restart: unless-stopped
+    logging: *default-logging
+    environment:
+      DATABASE_URL: postgresql://mmwss:${MMWSS_DB_PASSWORD}@db:5432/mmwss
+      MMWSS_MASTER_KEY: ${MMWSS_MASTER_KEY}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
+      CLOUDFLARE_TOKEN_LABEL: ${CLOUDFLARE_TOKEN_LABEL:-primary}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - mmwss_net
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+        reservations:
+          memory: 64m
+    # For Phase 1 slice 1: run "sync" once and exit. Restart policy will loop it,
+    # but we'll override the command to "scheduler" once that has real cron jobs.
+    command: ["sync"]
