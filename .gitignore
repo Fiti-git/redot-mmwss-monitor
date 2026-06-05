@@ -1,0 +1,65 @@
+# ─── Secrets — never commit ───
+.env
+.env.*
+!.env.example
+secrets/
+*.pem
+*.key
+*.crt
+*.pfx
+cookies.txt
+credentials.json
+service-account*.json
+
+# ─── Python ───
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ─── Node / Next.js ───
+node_modules/
+.next/
+out/
+.turbo/
+.cache/
+*.tsbuildinfo
+.npm/
+.yarn/
+.pnp.*
+
+# ─── Generated artifacts (regenerable, no value in git) ───
+cf_report.html
+cf_report.json
+cf_overview.json
+reports/
+*.log
+*.sqlite
+*.db
+
+# ─── Editor / OS ───
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ─── Local-only ───
+*.local
+.local/
+
+# ─── Coverage / test output ───
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
