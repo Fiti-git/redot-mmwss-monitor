@@ -22,6 +22,7 @@ from .scanners.nuclei import NucleiScanner
 from .scanners.surface import probe_and_diff as surface_probe_and_diff
 from .scanners.testssl import TestsslScanner
 from .scanners.wpscan import WPScanScanner
+from .scanners.zap import ZAPScanner
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ SCANNER_IMPLS = {
     "wpscan":  WPScanScanner(),
     "testssl": TestsslScanner(),
     "headers": HeadersScanner(),
+    "zap":     ZAPScanner(),
 }
 
 
@@ -86,6 +88,10 @@ def run_testssl(settings: Settings, conn) -> dict:
 
 def run_headers(settings: Settings, conn) -> dict:
     return _scan_all_zones(settings, conn, "headers")
+
+
+def run_zap(settings: Settings, conn) -> dict:
+    return _scan_all_zones(settings, conn, "zap")
 
 
 def run_surface(settings: Settings, conn) -> dict:

@@ -136,6 +136,97 @@ _TEMPLATES: dict[tuple[str, str], str] = {
         "HSTS max-age is below 6 months (15552000s). "
         "Increase to 31536000 (1 year) and add `includeSubDomains` if all subdomains are HTTPS.",
 
+    # ─── ZAP (DAST) ───
+    # Plugin IDs sourced from https://www.zaproxy.org/docs/alerts/
+    # Most-common alerts are listed; everything else falls through to the
+    # severity-based generic remediation.
+
+    ("zap", "zap-10020"):
+        "Missing/insecure X-Frame-Options. Add `X-Frame-Options: SAMEORIGIN` "
+        "via Cloudflare Transform Rule or origin web server. "
+        "Mitigates clickjacking.",
+
+    ("zap", "zap-10021"):
+        "X-Content-Type-Options missing. Add `X-Content-Type-Options: nosniff` "
+        "so browsers don't MIME-sniff responses.",
+
+    ("zap", "zap-10035"):
+        "Strict-Transport-Security missing. Add "
+        "`Strict-Transport-Security: max-age=31536000; includeSubDomains` "
+        "via Cloudflare or origin.",
+
+    ("zap", "zap-10038"):
+        "Content-Security-Policy missing. Start with: "
+        "`Content-Security-Policy: default-src 'self'; img-src * data:; "
+        "style-src 'self' 'unsafe-inline';` then tighten based on actual usage.",
+
+    ("zap", "zap-10054"):
+        "Cookie missing HttpOnly flag. Update the application to set HttpOnly on "
+        "all session/auth cookies so JavaScript cannot read them.",
+
+    ("zap", "zap-10055"):
+        "Cookie missing Secure flag. Update the application to set Secure on "
+        "all cookies so they're only sent over HTTPS.",
+
+    ("zap", "zap-10063"):
+        "Permissions-Policy header missing. Add a starter policy: "
+        "`Permissions-Policy: geolocation=(), microphone=(), camera=()`.",
+
+    ("zap", "zap-90004"):
+        "Insufficient Site Isolation Against Spectre Vulnerability. "
+        "Add `Cross-Origin-Opener-Policy: same-origin` and "
+        "`Cross-Origin-Embedder-Policy: require-corp` headers.",
+
+    ("zap", "zap-10027"):
+        "Information disclosure in HTTP response (timestamps, internal paths). "
+        "Strip leaking headers/footers from the response. Audit error pages.",
+
+    ("zap", "zap-10028"):
+        "Open redirect vulnerability detected. Sanitize redirect targets — "
+        "allow only relative URLs or a hard-coded allowlist of external hosts.",
+
+    ("zap", "zap-10095"):
+        "Backup file disclosure. Remove or block public access to .bak / .old / "
+        "~ files. Add a deny rule in nginx/Apache.",
+
+    ("zap", "zap-90022"):
+        "Application error disclosure. Application is returning stack traces / "
+        "detailed errors to users. Set production error handling to a generic page; "
+        "log details server-side only.",
+
+    ("zap", "zap-40012"):
+        "Cross-Site Scripting (Reflected) detected by ZAP active scanner. "
+        "Sanitize / encode the reflected parameter. Use framework-provided "
+        "output-encoding helpers; never inline user input into HTML.",
+
+    ("zap", "zap-40014"):
+        "Cross-Site Scripting (Persistent). High-severity stored XSS — fix urgently. "
+        "Sanitize input at write-time AND encode output at read-time.",
+
+    ("zap", "zap-40018"):
+        "SQL injection detected by ZAP active scanner. Replace string-concatenated "
+        "SQL with parameterized queries / prepared statements. Validate at the "
+        "application boundary. CRITICAL: rotate any credentials potentially exposed.",
+
+    ("zap", "zap-90020"):
+        "Remote OS Command Injection. CRITICAL — full server compromise possible. "
+        "Disable affected endpoint immediately. Replace shell calls with safe "
+        "library APIs; never pass user input to shell commands.",
+
+    ("zap", "zap-90035"):
+        "Server-Side Template Injection. Move user data out of the template "
+        "rendering context. Use parameterized rendering.",
+
+    ("zap", "zap-90019"):
+        "Server-Side Code Injection. CRITICAL — disable affected endpoint. "
+        "Never eval/exec user-controlled strings.",
+
+    ("zap", "zap-90021"):
+        "XPath Injection. Use parameterized XPath APIs or escape XPath special chars.",
+
+    ("zap", "zap-40009"):
+        "Server-Side Include detected. Disable SSI in web server config unless required.",
+
     # ─── surface ───
     ("surface", "new-subdomain/*"):
         "A new subdomain was detected. "

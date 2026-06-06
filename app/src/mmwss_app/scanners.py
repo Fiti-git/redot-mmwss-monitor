@@ -17,6 +17,7 @@ SCANNER_LABEL: dict[str, str] = {
     "testssl": "testssl.sh (TLS)",
     "headers": "Security headers",
     "surface": "Attack surface",
+    "zap":     "OWASP ZAP (DAST)",
 }
 
 RULE_ACTION_LABEL: dict[str, str] = {

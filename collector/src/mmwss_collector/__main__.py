@@ -122,9 +122,11 @@ def cmd_scheduler(settings) -> int:
                   CronTrigger(day_of_week="tue", hour=18, minute=0), id="scan_wpscan", max_instances=1, coalesce=True)
     sched.add_job(_wrap(scan_jobs.run_testssl, settings, "scan_testssl"),
                   CronTrigger(day_of_week="wed", hour=18, minute=0), id="scan_testssl", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(scan_jobs.run_zap, settings, "scan_zap"),
+                  CronTrigger(day_of_week="thu", hour=18, minute=0), id="scan_zap", max_instances=1, coalesce=True)
 
     log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily, "
-             "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl/weekly")
+             "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl+zap/weekly")
     try:
         sched.start()
     except (KeyboardInterrupt, SystemExit):
@@ -175,6 +177,7 @@ def cmd_scan(settings) -> int:
         "testssl": scan_jobs.run_testssl,
         "headers": scan_jobs.run_headers,
         "surface": scan_jobs.run_surface,
+        "zap":     scan_jobs.run_zap,
     }
     if kind not in runners:
         log.error("scan kind must be one of: %s", ", ".join(runners))
