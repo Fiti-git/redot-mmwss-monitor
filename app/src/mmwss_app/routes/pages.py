@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import auth, queries
+from .. import auth, db, queries
 
 router = APIRouter()
 templates: Jinja2Templates = None  # type: ignore  set in main
@@ -79,6 +81,45 @@ def reports(request: Request, user: dict = Depends(auth.require_user)):
         "reports.html",
         {"request": request, "user": user, "reports": rows, "active": "reports"},
     )
+
+
+REPORTS_ROOT = Path("/app/reports")
+
+
+def _serve_report(report_id: int, fmt: str, user: dict):
+    """Common path: validate id, fetch row, increment counter, serve file."""
+    r = db.fetch_one(
+        "SELECT id, html_path, pdf_path, type, period_start FROM mmwss.reports WHERE id = %s",
+        (report_id,),
+    )
+    if not r:
+        raise HTTPException(404, "Report not found")
+    path = r["html_path"] if fmt == "html" else r["pdf_path"]
+    if not path:
+        raise HTTPException(404, f"{fmt.upper()} not available for this report")
+    p = Path(path)
+    # Defense in depth — never serve outside REPORTS_ROOT
+    try:
+        p.relative_to(REPORTS_ROOT)
+    except ValueError:
+        raise HTTPException(403, "Forbidden")
+    if not p.exists():
+        raise HTTPException(404, "File missing on disk")
+    db.execute("UPDATE mmwss.reports SET downloaded_count = downloaded_count + 1 WHERE id = %s", (report_id,))
+    period = r["period_start"].strftime("%Y-%m-%d")
+    download_name = f"mmwss-{r['type']}-{period}.{fmt}"
+    media = "text/html" if fmt == "html" else "application/pdf"
+    return FileResponse(str(p), media_type=media, filename=download_name)
+
+
+@router.get("/reports/{report_id}/html")
+def report_html(report_id: int, user: dict = Depends(auth.require_user)):
+    return _serve_report(report_id, "html", user)
+
+
+@router.get("/reports/{report_id}/pdf")
+def report_pdf(report_id: int, user: dict = Depends(auth.require_user)):
+    return _serve_report(report_id, "pdf", user)
 
 
 @router.get("/settings", response_class=HTMLResponse)

@@ -26,7 +26,7 @@
           <td class="px-6 py-3.5 text-[13px] text-ink-muted">{{ r.generated_at | datetime_str }}</td>
           <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink-muted">{{ r.downloaded_count }}</td>
           <td class="px-6 py-3.5 text-[13px] text-right">
-            {% if r.html_path %}<a class="text-brand font-medium hover:underline" href="{{ base_path }}/reports/{{ r.id }}/html">HTML</a>{% endif %}
+            {% if r.html_path %}<a class="text-brand font-medium hover:underline" href="{{ base_path }}/reports/{{ r.id }}/html" target="_blank">HTML</a>{% endif %}
             {% if r.pdf_path %}<a class="text-brand font-medium hover:underline ml-3" href="{{ base_path }}/reports/{{ r.id }}/pdf">PDF</a>{% endif %}
           </td>
         </tr>

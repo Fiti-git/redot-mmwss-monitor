@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 20mm 16mm;
+    @bottom-left  { content: "{{ footer_left }}";  font-size: 9px; color: #888; font-family: 'Inter', sans-serif; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 9px; color: #888; font-family: 'Inter', sans-serif; }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    color: #0F172A;
+    font-family: 'Inter', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-size: 10.5px;
+    line-height: 1.5;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  h1, h2, h3 { margin: 0; font-weight: 700; color: #0F172A; letter-spacing: -0.01em; }
+  h1 { font-size: 26px; }
+  h2 { font-size: 14px; margin-top: 18px; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #E5E7EB; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; }
+  .muted { color: #64748B; }
+  .small { font-size: 9.5px; }
+  .tabular { font-variant-numeric: tabular-nums; }
+  .row-flex { display: flex; gap: 12px; align-items: flex-start; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 600; border-bottom: 1px solid #E5E7EB; }
+  td { border-bottom: 1px solid #F1F3F6; font-size: 10.5px; }
+  .right { text-align: right; }
+  .center { text-align: center; }
+
+  /* Cover header */
+  .cover {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    margin-bottom: 22px; padding-bottom: 14px; border-bottom: 3px solid #E11E27;
+  }
+  .brand-block { display: flex; align-items: center; gap: 10px; }
+  .brand-icon { width: 36px; height: 36px; border-radius: 6px; background: #E11E27; color: #fff; font-weight: 800; font-size: 18px; display: flex; align-items: center; justify-content: center; }
+  .brand-text { font-size: 12px; font-weight: 700; color: #0F172A; letter-spacing: -0.01em; }
+  .brand-sub  { font-size: 9px; color: #64748B; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
+  .meta { text-align: right; font-size: 9.5px; color: #64748B; }
+  .meta .strong { color: #0F172A; font-weight: 600; }
+
+  /* Hero title */
+  .hero { margin-bottom: 16px; }
+  .hero .period { font-size: 10px; color: #E11E27; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; margin-bottom: 4px; }
+  .hero p { color: #475569; margin: 6px 0 0 0; max-width: 540px; }
+
+  /* KPI grid */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .kpi { border: 1px solid #E5E7EB; border-radius: 6px; padding: 9px 11px; }
+  .kpi .label { font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #64748B; font-weight: 600; }
+  .kpi .value { font-size: 20px; font-weight: 800; margin-top: 3px; letter-spacing: -0.02em; color: #0F172A; }
+  .kpi .sub   { font-size: 8.5px; color: #94A3B8; margin-top: 2px; }
+  .kpi.accent-red    .value { color: #E11E27; }
+  .kpi.accent-green  .value { color: #10B981; }
+  .kpi.accent-amber  .value { color: #F59E0B; }
+
+  /* Status pills */
+  .pill { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 8.5px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+  .pill.green  { background: #D1FAE5; color: #047857; }
+  .pill.red    { background: #FEE5E5; color: #9F0F14; }
+  .pill.amber  { background: #FEF3C7; color: #B45309; }
+  .pill.blue   { background: #DBEAFE; color: #1D4ED8; }
+  .pill.grey   { background: #F1F3F6; color: #64748B; }
+
+  /* Recommendation cards */
+  .rec { border-left: 3px solid #E11E27; background: #FFF7F8; padding: 8px 10px; margin-bottom: 6px; border-radius: 0 4px 4px 0; }
+  .rec.warn { border-left-color: #F59E0B; background: #FFFBEB; }
+  .rec.info { border-left-color: #3B82F6; background: #EFF6FF; }
+  .rec .rec-title { font-size: 10px; font-weight: 700; margin-bottom: 2px; }
+  .rec .rec-body  { font-size: 9.5px; color: #475569; }
+
+  /* Sparkline placeholder block */
+  .bar-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10px; }
+  .bar-row .label { width: 130px; }
+  .bar-row .bar-wrap { flex: 1; height: 8px; background: #F1F3F6; border-radius: 4px; overflow: hidden; }
+  .bar-row .bar { height: 100%; background: #E11E27; }
+  .bar-row .num { width: 70px; text-align: right; font-variant-numeric: tabular-nums; color: #475569; }
+
+  /* Footer summary */
+  .summary-box { background: #F7F8FA; border: 1px solid #E5E7EB; border-radius: 6px; padding: 10px 12px; margin-top: 8px; font-size: 10px; color: #475569; }
+
+  /* Section spacing */
+  section { margin-bottom: 10px; }
+  .avoid-break { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cover avoid-break">
+  <div class="brand-block">
+    <div class="brand-icon">R</div>
+    <div>
+      <div class="brand-text">{{ company }}</div>
+      <div class="brand-sub">{{ product }} · Security Report</div>
+    </div>
+  </div>
+  <div class="meta">
+    <div class="strong">{{ report_type | title }} Report</div>
+    <div>{{ period_label }}</div>
+    <div>Generated {{ generated_at }}</div>
+  </div>
+</div>
+
+<section class="hero avoid-break">
+  <div class="period">{{ period_label }}</div>
+  <h1>{{ title }}</h1>
+  <p>
+    {% if stats.threats > 0 -%}
+    Across {{ stats.zones }} monitored sites, MMWSS blocked <strong>{{ stats.threats | format_int }} security threats</strong>
+    {%- else -%}
+    Across {{ stats.zones }} monitored sites,
+    {%- endif %}
+    served <strong>{{ stats.requests | format_int }} requests</strong> ({{ stats.bytes | human_bytes }})
+    with a cache-hit ratio of <strong>{{ '%.1f'|format(stats.hit_ratio) }}%</strong>.
+    {% if stats.incidents_open > 0 %}There {{ 'is' if stats.incidents_open == 1 else 'are' }} <strong>{{ stats.incidents_open }} open incident{{ '' if stats.incidents_open == 1 else 's' }}</strong> at the time of this report.{% else %}No open incidents at the time of this report.{% endif %}
+  </p>
+</section>
+
+<section class="avoid-break">
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Active sites</div>
+      <div class="value tabular">{{ stats.zones | format_int }}</div>
+      <div class="sub">monitored continuously</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Requests</div>
+      <div class="value tabular">{{ stats.requests | format_int }}</div>
+      <div class="sub">{{ stats.bytes | human_bytes }} served</div>
+    </div>
+    <div class="kpi accent-green">
+      <div class="label">Cache hit</div>
+      <div class="value tabular">{{ '%.1f'|format(stats.hit_ratio) }}%</div>
+      <div class="sub">{{ stats.cached | format_int }} of {{ stats.requests | format_int }}</div>
+    </div>
+    <div class="kpi {{ 'accent-red' if stats.threats > 0 else '' }}">
+      <div class="label">Threats blocked</div>
+      <div class="value tabular">{{ stats.threats | format_int }}</div>
+      <div class="sub">across all sites</div>
+    </div>
+  </div>
+</section>
+
+<section class="avoid-break">
+  <h2>Site performance</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Plan</th>
+        <th>Status</th>
+        <th class="right">Uptime</th>
+        <th class="right">Requests</th>
+        <th class="right">Cache hit</th>
+        <th class="right">Threats</th>
+        <th class="right">SSL expires</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in sites %}
+      <tr>
+        <td><strong>{{ s.name }}</strong></td>
+        <td class="muted">{{ s.plan or '—' }}</td>
+        <td>
+          {% if s.uptime_pct is none %}<span class="pill grey">no data</span>
+          {% elif s.uptime_pct >= 99.9 %}<span class="pill green">healthy</span>
+          {% elif s.uptime_pct >= 99 %}<span class="pill amber">degraded</span>
+          {% else %}<span class="pill red">unstable</span>{% endif %}
+        </td>
+        <td class="right tabular">{% if s.uptime_pct is not none %}{{ '%.2f'|format(s.uptime_pct) }}%{% else %}—{% endif %}</td>
+        <td class="right tabular">{{ s.requests | format_int }}</td>
+        <td class="right tabular">{% if s.hit_ratio is not none %}{{ '%.0f'|format(s.hit_ratio) }}%{% else %}—{% endif %}</td>
+        <td class="right tabular">{{ s.threats | format_int }}</td>
+        <td class="right muted">{{ s.ssl_expiry_date or '—' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if sites_with_threats %}
+<section class="avoid-break">
+  <h2>Threats blocked by site</h2>
+  {% for s in sites_with_threats %}
+    <div class="bar-row">
+      <div class="label">{{ s.name }}</div>
+      <div class="bar-wrap"><div class="bar" style="width: {{ s.threat_pct }}%"></div></div>
+      <div class="num">{{ s.threats | format_int }}</div>
+    </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<section>
+  <h2>Incidents during this period</h2>
+  {% if incidents %}
+  <table>
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th>Site</th>
+        <th>Type</th>
+        <th>Summary</th>
+        <th>Started</th>
+        <th>Duration</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for i in incidents %}
+      <tr>
+        <td>
+          {% if i.severity == 'critical' %}<span class="pill red">{{ i.severity }}</span>
+          {% elif i.severity == 'warning' %}<span class="pill amber">{{ i.severity }}</span>
+          {% else %}<span class="pill blue">{{ i.severity }}</span>{% endif %}
+        </td>
+        <td><strong>{{ i.zone_name }}</strong></td>
+        <td class="muted small">{{ i.type }}</td>
+        <td>{{ i.summary }}</td>
+        <td class="muted small tabular">{{ i.started_at_str }}</td>
+        <td class="tabular small">{{ i.duration }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="summary-box">No incidents recorded during this period — every site stayed responsive and within configured thresholds.</div>
+  {% endif %}
+</section>
+
+{% if recommendations %}
+<section>
+  <h2>Recommended actions</h2>
+  {% for r in recommendations %}
+  <div class="rec {{ r.severity }}">
+    <div class="rec-title">{{ r.site }} · {{ r.title }}</div>
+    <div class="rec-body">{{ r.body }}</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+<div class="summary-box">
+  <strong>About this report.</strong>
+  MMWSS continuously monitors {{ stats.zones }} site{{ '' if stats.zones == 1 else 's' }} protected by Cloudflare. Uptime is probed every 60 seconds from Singapore. Traffic and security metrics are pulled hourly from Cloudflare's GraphQL Analytics API. Configuration snapshots are captured every 6 hours so changes can be detected. Report generated automatically by MMWSS on {{ generated_at }}.
+</div>
+
+</body>
+</html>

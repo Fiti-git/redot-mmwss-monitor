@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, db, jobs
+from . import alerts, db, jobs, reports
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -89,7 +89,25 @@ def cmd_scheduler(settings) -> int:
     sched.add_job(_wrap(sync_all_zones, settings, "sync_zones"),
                   CronTrigger(hour=2, minute=0), id="zone_sync", max_instances=1, coalesce=True)
 
-    log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily")
+    # Report cadence — all UTC. SGT is UTC+8.
+    #   Daily   07:00 SGT = 23:00 UTC the previous day
+    #   Weekly  Monday 08:00 SGT = Sunday 00:00 UTC
+    #   Monthly 1st 09:00 SGT = 01:00 UTC on the 1st
+    def _gen(kind):
+        def job():
+            with db.connect(settings.database_url) as conn:
+                reports.generate_report(settings, conn, kind)
+        return job
+
+    sched.add_job(_wrap(lambda s, c: reports.generate_report(s, c, "daily"), settings, "report_daily"),
+                  CronTrigger(hour=23, minute=0), id="report_daily", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(lambda s, c: reports.generate_report(s, c, "weekly"), settings, "report_weekly"),
+                  CronTrigger(day_of_week="sun", hour=0, minute=0), id="report_weekly", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(lambda s, c: reports.generate_report(s, c, "monthly"), settings, "report_monthly"),
+                  CronTrigger(day=1, hour=1, minute=0), id="report_monthly", max_instances=1, coalesce=True)
+
+    log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily, "
+             "report_daily/weekly/monthly")
     try:
         sched.start()
     except (KeyboardInterrupt, SystemExit):
@@ -100,9 +118,24 @@ def cmd_scheduler(settings) -> int:
 def cmd_test_alert(settings) -> int:
     """Send a test Slack alert to verify the webhook is wired up."""
     with db.connect(settings.database_url) as conn:
-        db.apply_pending_migrations(conn)  # ensure mmwss.alerts table exists
+        db.apply_pending_migrations(conn)
         ok = alerts.notify_test(settings, conn)
     return 0 if ok else 1
+
+
+def cmd_report(settings) -> int:
+    """Generate a report on demand.
+    Usage:  collector report daily|weekly|monthly
+    """
+    kind = sys.argv[2] if len(sys.argv) > 2 else "daily"
+    if kind not in ("daily", "weekly", "monthly"):
+        log.error("kind must be daily|weekly|monthly")
+        return 2
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        report_id = reports.generate_report(settings, conn, kind)
+    log.info("Generated %s report id=%d", kind, report_id)
+    return 0
 
 
 COMMANDS = {
@@ -110,6 +143,7 @@ COMMANDS = {
     "sync": cmd_sync,
     "scheduler": cmd_scheduler,
     "test_alert": cmd_test_alert,
+    "report": cmd_report,
 }
 
 
