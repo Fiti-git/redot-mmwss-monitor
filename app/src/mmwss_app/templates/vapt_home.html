@@ -1,0 +1,138 @@
+{% extends "_app_shell.html" %}
+{% block title %}VAPT — MMWSS{% endblock %}
+
+{% macro sev_chip(s) %}
+{% set cls = {'critical':'bg-danger-soft text-danger-dark','high':'bg-warn-soft text-warn-dark',
+              'medium':'bg-info-soft text-info-dark','low':'bg-surface-sunken text-ink-muted',
+              'info':'bg-surface-sunken text-ink-subtle'}[s] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ sev_label[s] }}</span>
+{% endmacro %}
+
+{% macro status_chip(s) %}
+{% if s == 'open' %}<span class="inline-flex items-center gap-1 text-[11px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger"></span>open</span>
+{% elif s == 'in_progress' %}<span class="inline-flex items-center gap-1 text-[11px] text-warn-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-warn"></span>in progress</span>
+{% elif s == 'remediated' %}<span class="inline-flex items-center gap-1 text-[11px] text-info-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-info"></span>remediated</span>
+{% elif s == 'verified' %}<span class="inline-flex items-center gap-1 text-[11px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>verified</span>
+{% elif s == 'accepted_risk' %}<span class="text-[11px] text-ink-muted">accepted risk</span>
+{% else %}<span class="text-[11px] text-ink-muted">false positive</span>{% endif %}
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1400px]">
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">VAPT remediation</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">Vulnerability Assessment &amp; Penetration Testing reports and the remediation status of each finding.</p>
+    </div>
+    {% if user.role == 'admin' %}
+    <a href="{{ base_path }}/vapt/reports/new"
+       class="inline-flex items-center gap-1.5 h-10 px-4 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-lg shadow-card">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New VAPT report
+    </a>
+    {% endif %}
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Reports</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.reports }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Findings</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.findings_total }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open total</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.findings_open > 0 else 'ink' }}">{{ counters.findings_open }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open critical</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.open_critical > 0 else 'ink' }}">{{ counters.open_critical }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open high</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'warn' if counters.open_high > 0 else 'ink' }}">{{ counters.open_high }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open med/low</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.open_medium + counters.open_low }}</div>
+    </div>
+  </div>
+
+  <!-- Reports -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Reports</h2></div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Vendor</th>
+          <th class="text-left px-5 py-3">Report date</th>
+          <th class="text-right px-5 py-3">Findings</th>
+          <th class="text-right px-5 py-3">Open</th>
+          <th class="text-right px-5 py-3">Open critical</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[13.5px]">
+            <a href="{{ base_path }}/vapt/reports/{{ r.id }}" class="text-ink font-semibold hover:text-brand">{{ r.title }}</a>
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ r.vendor or '—' }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ r.report_date | date_only if r.report_date else '—' }}</td>
+          <td class="px-5 py-3 text-[13px] text-right tabular text-ink">{{ r.total_findings }}</td>
+          <td class="px-5 py-3 text-[13px] text-right tabular text-{{ 'danger' if r.open_findings > 0 else 'ink-muted' }}">{{ r.open_findings }}</td>
+          <td class="px-5 py-3 text-[13px] text-right tabular text-{{ 'danger font-semibold' if r.open_critical > 0 else 'ink-muted' }}">{{ r.open_critical }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="px-5 py-12 text-center text-ink-muted text-[13px]">
+          No VAPT reports uploaded yet. {% if user.role == 'admin' %}<a href="{{ base_path }}/vapt/reports/new" class="text-brand font-semibold">+ New report</a>{% endif %}
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- All findings -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">All findings</h2></div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Severity</th>
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">CVE</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-left px-5 py-3">Linked ticket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted tabular">#{{ f.id }}</td>
+          <td class="px-5 py-3">{{ sev_chip(f.severity) }}</td>
+          <td class="px-5 py-3 text-[13.5px]">
+            <a href="{{ base_path }}/vapt/findings/{{ f.id }}" class="text-ink font-semibold hover:text-brand">{{ f.title }}</a>
+            {% if f.vendor_finding_id %}<span class="ml-1 text-[10px] text-ink-subtle font-mono">{{ f.vendor_finding_id }}</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ f.zone_name or '—' }}</td>
+          <td class="px-5 py-3 text-[11.5px] font-mono text-ink-muted">{{ f.cve_reference or '—' }}</td>
+          <td class="px-5 py-3">{{ status_chip(f.status) }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if f.linked_ticket_id %}<a href="{{ base_path }}/tickets/{{ f.linked_ticket_id }}" class="text-brand hover:underline">#{{ f.linked_ticket_id }}</a>
+            {% else %}<span class="text-ink-subtle">—</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="px-5 py-12 text-center text-ink-muted text-[13px]">No findings yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

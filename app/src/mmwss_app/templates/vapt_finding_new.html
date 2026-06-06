@@ -1,0 +1,117 @@
+{% extends "_app_shell.html" %}
+{% block title %}New finding — VAPT — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="max-w-[920px]">
+  <div class="mb-6">
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/vapt" class="hover:text-brand">VAPT</a> /
+      <a href="{{ base_path }}/vapt/reports/{{ report.id }}" class="hover:text-brand">{{ report.title }}</a> / New finding
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">New finding</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">Log a vulnerability from the VAPT report. Severity drives both the SLA target and the auto-created ticket priority.</p>
+  </div>
+
+  <form method="post" action="{{ base_path }}/vapt/reports/{{ report.id }}/findings/new" class="bg-white border border-line rounded-xl2 shadow-card p-6 space-y-5">
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Title</label>
+      <input name="title" type="text" required maxlength="200"
+             placeholder="Short summary of the vulnerability"
+             class="w-full h-11 px-3.5 bg-white border border-line rounded-lg text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand">
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Severity</label>
+      <div class="grid grid-cols-1 md:grid-cols-5 gap-2">
+        {% for sev in ['critical', 'high', 'medium', 'low', 'info'] %}
+        {% set hcol = {'critical':'border-danger bg-danger-soft','high':'border-warn bg-warn-soft',
+                      'medium':'border-info bg-info-soft','low':'border-line bg-surface-alt',
+                      'info':'border-line bg-surface-alt'}[sev] %}
+        <label class="flex flex-col gap-1 px-3 py-3 bg-surface-alt border border-line rounded-lg cursor-pointer hover:bg-white hover:border-brand-300 has-[:checked]:{{ hcol }}">
+          <div class="flex items-center gap-2">
+            <input type="radio" name="severity" value="{{ sev }}" required>
+            <span class="text-[12.5px] font-bold text-ink">{{ sev_label[sev] }}</span>
+          </div>
+          <div class="text-[10px] text-ink-muted">
+            SLA {{ (sla_by_sev[sev] // 3600) if sla_by_sev[sev] < 86400 else (sla_by_sev[sev] // 86400) }}{{ 'h' if sla_by_sev[sev] < 86400 else 'd' }}
+            {% if sev == 'critical' %}<span class="text-danger font-semibold">· P1 ticket</span>
+            {% elif sev == 'high' %}<span class="text-warn-dark font-semibold">· P2 ticket</span>
+            {% elif sev == 'medium' %}<span class="text-info-dark">· P3 ticket</span>
+            {% elif sev == 'low' %}<span class="text-ink-muted">· P4 ticket</span>
+            {% else %}<span class="text-ink-subtle">· no ticket</span>{% endif %}
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Vendor finding ID</label>
+        <input name="vendor_finding_id" type="text" maxlength="100" placeholder="e.g., VAPT-2026-Q3-014"
+               class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">CVE reference</label>
+        <input name="cve_reference" type="text" maxlength="50" placeholder="CVE-2026-XXXX"
+               class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">CVSS score (0–10)</label>
+        <input name="cvss_score" type="number" min="0" max="10" step="0.1" placeholder="7.5"
+               class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">OWASP category</label>
+        <input name="owasp_category" type="text" maxlength="100" placeholder="e.g., A03:2021 - Injection"
+               class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Affected site</label>
+        <select name="zone_id" class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <option value="">— Cross-cutting / not site-specific —</option>
+          {% for z in zones %}
+          <option value="{{ z.id }}">{{ z.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Affected URL</label>
+      <input name="affected_url" type="text" maxlength="500" placeholder="https://example.sg/path"
+             class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand">
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Description</label>
+      <textarea name="description" rows="3" placeholder="Vulnerability summary, impact, conditions"
+                class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Proof / evidence (from VAPT report)</label>
+      <textarea name="proof_text" rows="4" placeholder="Request/response, payload, screenshot description, etc."
+                class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+    </div>
+
+    <div class="bg-surface-alt border border-line rounded-lg p-3">
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" name="auto_create_ticket" checked class="mt-0.5">
+        <div>
+          <div class="text-[13px] font-semibold text-ink">Auto-create a linked ticket for SLA tracking</div>
+          <div class="text-[11.5px] text-ink-muted mt-0.5">Recommended. Severity → priority (Critical=P1, High=P2, Medium=P3, Low=P4). Info findings are tracked passively without a ticket.</div>
+        </div>
+      </label>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2 border-t border-line">
+      <a href="{{ base_path }}/vapt/reports/{{ report.id }}" class="h-10 px-4 inline-flex items-center text-[13px] font-semibold text-ink-muted hover:text-ink">Cancel</a>
+      <button type="submit" class="h-10 px-5 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-md shadow-card">Create finding</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

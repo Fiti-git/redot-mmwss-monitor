@@ -1,0 +1,121 @@
+{% extends "_app_shell.html" %}
+{% block title %}#{{ f.id }} {{ f.title }} — VAPT — MMWSS{% endblock %}
+
+{% macro sev_chip(s) %}
+{% set cls = {'critical':'bg-danger-soft text-danger-dark','high':'bg-warn-soft text-warn-dark',
+              'medium':'bg-info-soft text-info-dark','low':'bg-surface-sunken text-ink-muted',
+              'info':'bg-surface-sunken text-ink-subtle'}[s] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ sev_label[s] }}</span>
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1100px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/vapt" class="hover:text-brand">VAPT</a> /
+      <a href="{{ base_path }}/vapt/reports/{{ f.report_id }}" class="hover:text-brand">{{ f.report_title }}</a> /
+      Finding #{{ f.id }}
+    </div>
+    <div class="flex items-center gap-2 mb-1.5">
+      {{ sev_chip(f.severity) }}
+      <span class="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">{{ status_label[f.status] }}</span>
+      {% if f.vendor_finding_id %}<span class="text-[10px] font-mono text-ink-muted">{{ f.vendor_finding_id }}</span>{% endif %}
+    </div>
+    <h1 class="text-[22px] font-bold text-ink tracking-tight">{{ f.title }}</h1>
+    <div class="text-[12.5px] text-ink-muted mt-1">
+      {% if f.zone_name %}<a href="{{ base_path }}/zones/{{ f.zone_id }}" class="hover:text-brand">{{ f.zone_name }}</a> · {% endif %}
+      Discovered {{ f.discovered_at | datetime_str }}
+      {% if f.linked_ticket_id %}
+      · <a href="{{ base_path }}/tickets/{{ f.linked_ticket_id }}" class="text-brand font-semibold hover:underline">Ticket #{{ f.linked_ticket_id }}</a> ({{ f.linked_ticket_status }})
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Metadata grid -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">CVE</div>
+      <div class="text-[13px] font-mono text-ink mt-1 break-all">{{ f.cve_reference or '—' }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">CVSS</div>
+      <div class="text-[18px] font-bold tabular mt-1 text-ink">{{ f.cvss_score or '—' }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">OWASP</div>
+      <div class="text-[12px] text-ink mt-1">{{ f.owasp_category or '—' }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">SLA target</div>
+      <div class="text-[14px] font-semibold text-ink mt-1 tabular">
+        {% if f.sla_resolution_secs < 86400 %}{{ f.sla_resolution_secs // 3600 }} hours
+        {% else %}{{ f.sla_resolution_secs // 86400 }} days{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% if f.affected_url %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Affected URL</h2></div>
+    <div class="px-5 py-3 text-[13px] font-mono text-ink-muted break-all">{{ f.affected_url }}</div>
+  </div>
+  {% endif %}
+
+  {% if f.description %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Description</h2></div>
+    <div class="px-5 py-3 text-[13.5px] text-ink whitespace-pre-line">{{ f.description }}</div>
+  </div>
+  {% endif %}
+
+  {% if f.proof_text %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Proof / evidence</h2></div>
+    <pre class="px-5 py-3 text-[12px] font-mono text-ink-muted whitespace-pre-wrap">{{ f.proof_text }}</pre>
+  </div>
+  {% endif %}
+
+  <!-- Status + remediation form (admin only) -->
+  {% if user.role == 'admin' %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[13px] uppercase tracking-wider font-semibold text-ink">Remediation</h2></div>
+    <form method="post" action="{{ base_path }}/vapt/findings/{{ f.id }}/update" class="px-5 py-4 space-y-4">
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Status</label>
+        <select name="status" class="w-full md:w-1/2 h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          {% for s in ['open','in_progress','remediated','verified','accepted_risk','false_positive'] %}
+          <option value="{{ s }}" {% if f.status == s %}selected{% endif %}>{{ status_label[s] }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Remediation plan</label>
+        <textarea name="remediation_plan" rows="3" placeholder="What change will fix this finding"
+                  class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">{{ f.remediation_plan or '' }}</textarea>
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Remediation evidence</label>
+        <textarea name="remediation_evidence" rows="4" placeholder="Diff, screenshot description, verification scan output, ticket ID(s)"
+                  class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand">{{ f.remediation_evidence or '' }}</textarea>
+      </div>
+      <div class="flex items-center gap-2 pt-2 border-t border-line">
+        <button type="submit" class="h-10 px-5 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-md shadow-card">Update</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  <!-- Lifecycle timestamps -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Lifecycle</h2></div>
+    <table class="w-full text-[13px]">
+      <tbody>
+        <tr><td class="px-5 py-2 text-ink-muted w-40">Discovered</td><td class="px-5 py-2 text-ink">{{ f.discovered_at | datetime_str }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">In progress at</td><td class="px-5 py-2 text-ink">{{ f.in_progress_at | datetime_str if f.in_progress_at else '—' }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Remediated at</td><td class="px-5 py-2 text-ink">{{ f.remediated_at | datetime_str if f.remediated_at else '—' }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Verified at</td><td class="px-5 py-2 text-ink">{{ f.verified_at | datetime_str if f.verified_at else '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

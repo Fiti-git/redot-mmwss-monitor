@@ -16,7 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, filters
 from .config import get_settings
-from .routes import api_routes, auth_routes, pages, ticket_routes
+from .routes import api_routes, auth_routes, pages, ticket_routes, vapt_routes
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +59,8 @@ app.include_router(pages.router, prefix=BASE_PATH)
 app.include_router(api_routes.router, prefix=BASE_PATH)
 ticket_routes.templates = templates
 app.include_router(ticket_routes.router, prefix=BASE_PATH)
+vapt_routes.templates = templates
+app.include_router(vapt_routes.router, prefix=BASE_PATH)
 
 
 @app.get("/healthz")
