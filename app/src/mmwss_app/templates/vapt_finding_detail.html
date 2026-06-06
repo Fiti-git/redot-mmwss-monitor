@@ -61,6 +61,33 @@
   </div>
   {% endif %}
 
+  {% if f.source == 'internal_scan' %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Internal scanner detection</h2>
+      {% if user.role == 'admin' %}
+      <a href="{{ base_path }}/scanners/rules/from-finding/{{ f.id }}"
+         class="text-[12px] text-brand hover:underline font-semibold">+ Create triage rule from this finding →</a>
+      {% endif %}
+    </div>
+    <table class="w-full text-[13px]">
+      <tbody>
+        <tr><td class="px-5 py-2 text-ink-muted w-44">Scanner</td><td class="px-5 py-2 text-ink font-mono">{{ f.scanner }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Template ID</td><td class="px-5 py-2 text-ink font-mono break-all">{{ f.scanner_template_id }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Target URL</td><td class="px-5 py-2 text-ink font-mono break-all">{{ f.target_url }}</td></tr>
+        {% if f.parameter %}<tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Parameter</td><td class="px-5 py-2 text-ink font-mono">{{ f.parameter }}</td></tr>{% endif %}
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Risk score</td><td class="px-5 py-2 text-ink tabular">{{ '%.1f' % f.risk_score if f.risk_score else '—' }} / 100</td></tr>
+        {% if f.epss_score %}<tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">EPSS</td><td class="px-5 py-2 text-ink tabular">{{ '%.3f' % f.epss_score }}</td></tr>{% endif %}
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">First seen</td><td class="px-5 py-2 text-ink">{{ f.first_seen_at | datetime_str if f.first_seen_at else '—' }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Last seen</td><td class="px-5 py-2 text-ink">{{ f.last_seen_at | datetime_str if f.last_seen_at else '—' }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Consecutive misses</td><td class="px-5 py-2 text-ink tabular">{{ f.consecutive_misses or 0 }}</td></tr>
+        <tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Scan run</td><td class="px-5 py-2 text-ink">{% if f.scan_run_id %}<a href="{{ base_path }}/scanners/runs/{{ f.scan_run_id }}" class="text-brand hover:underline">#{{ f.scan_run_id }}</a>{% else %}—{% endif %}</td></tr>
+        {% if f.suppressed_by_rule_id %}<tr class="border-t border-line"><td class="px-5 py-2 text-ink-muted">Suppressed by rule</td><td class="px-5 py-2 text-ink"><a href="{{ base_path }}/scanners/rules" class="text-brand hover:underline">#{{ f.suppressed_by_rule_id }}</a></td></tr>{% endif %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   {% if f.description %}
   <div class="bg-white border border-line rounded-xl2 shadow-card">
     <div class="px-5 py-3 border-b border-line"><h2 class="text-[12px] uppercase tracking-wider font-semibold text-ink">Description</h2></div>

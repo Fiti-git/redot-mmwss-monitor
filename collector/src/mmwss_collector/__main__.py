@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, db, jobs, reports
+from . import alerts, db, jobs, reports, scan_jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -108,8 +108,23 @@ def cmd_scheduler(settings) -> int:
     sched.add_job(_wrap(lambda s, c: reports.generate_report(s, c, "monthly"), settings, "report_monthly"),
                   CronTrigger(day=1, hour=1, minute=0), id="report_monthly", max_instances=1, coalesce=True)
 
+    # ───── In-house VAPT scanners (Phase 1) ─────
+    # All UTC; SGT = UTC+8.
+    # headers + surface = light, run daily.   nuclei + wpscan + testssl = heavy, run weekly.
+    # Stagger schedules so they don't all hammer at once.
+    sched.add_job(_wrap(scan_jobs.run_headers, settings, "scan_headers"),
+                  CronTrigger(hour=22, minute=15), id="scan_headers", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(scan_jobs.run_surface, settings, "scan_surface"),
+                  CronTrigger(hour=22, minute=45), id="scan_surface", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(scan_jobs.run_nuclei, settings, "scan_nuclei"),
+                  CronTrigger(day_of_week="mon", hour=18, minute=0), id="scan_nuclei", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(scan_jobs.run_wpscan, settings, "scan_wpscan"),
+                  CronTrigger(day_of_week="tue", hour=18, minute=0), id="scan_wpscan", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(scan_jobs.run_testssl, settings, "scan_testssl"),
+                  CronTrigger(day_of_week="wed", hour=18, minute=0), id="scan_testssl", max_instances=1, coalesce=True)
+
     log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily, "
-             "report_daily/weekly/monthly")
+             "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl/weekly")
     try:
         sched.start()
     except (KeyboardInterrupt, SystemExit):
@@ -149,6 +164,28 @@ def cmd_wp_check(settings) -> int:
     return 0
 
 
+def cmd_scan(settings) -> int:
+    """Run one scanner against all active zones, on demand.
+    Usage:  collector scan nuclei|wpscan|testssl|headers|surface
+    """
+    kind = sys.argv[2] if len(sys.argv) > 2 else ""
+    runners = {
+        "nuclei":  scan_jobs.run_nuclei,
+        "wpscan":  scan_jobs.run_wpscan,
+        "testssl": scan_jobs.run_testssl,
+        "headers": scan_jobs.run_headers,
+        "surface": scan_jobs.run_surface,
+    }
+    if kind not in runners:
+        log.error("scan kind must be one of: %s", ", ".join(runners))
+        return 2
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        r = runners[kind](settings, conn)
+    log.info("scan %s complete: %s", kind, r)
+    return 0
+
+
 COMMANDS = {
     "migrate": cmd_migrate,
     "sync": cmd_sync,
@@ -156,6 +193,7 @@ COMMANDS = {
     "test_alert": cmd_test_alert,
     "report": cmd_report,
     "wp_check": cmd_wp_check,
+    "scan": cmd_scan,
 }
 
 

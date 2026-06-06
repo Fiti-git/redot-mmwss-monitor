@@ -502,6 +502,106 @@ def _uptime_per_site(conn, start, end) -> list[dict]:
     return rows
 
 
+def _scanner_summary(conn, start, end) -> dict:
+    """Internal-scanner activity for the period: per-scanner runs, new findings,
+    auto-verified findings, and per-severity / per-scanner open posture."""
+    out: dict = {
+        "runs_in_period": [],         # per scanner: total, ok, failed, total_findings, new_findings
+        "new_in_period_by_sev": {},   # {severity: count}
+        "open_by_scanner": [],        # per scanner: open total, open critical/high/med/low
+        "auto_verified_in_period": 0,
+        "top_findings": [],           # top 10 by risk_score, open or in_progress
+        "surface_changes": {"new_hosts": 0, "lost_hosts": 0, "active_hosts": 0},
+    }
+    out["runs_in_period"] = _qn(
+        conn,
+        """
+        SELECT s.name AS scanner,
+               COUNT(r.id)::int AS runs,
+               COUNT(r.id) FILTER (WHERE r.status = 'ok')::int     AS runs_ok,
+               COUNT(r.id) FILTER (WHERE r.status = 'failed')::int AS runs_failed,
+               COALESCE(SUM(r.findings_total), 0)::int AS findings_total,
+               COALESCE(SUM(r.findings_new), 0)::int   AS findings_new,
+               COALESCE(SUM(r.findings_resolved), 0)::int AS findings_resolved
+          FROM mmwss.scanners s
+          LEFT JOIN mmwss.scan_runs r
+            ON r.scanner_id = s.id AND r.started_at >= %s AND r.started_at < %s
+         GROUP BY s.id, s.name
+         ORDER BY s.name
+        """,
+        (start, end),
+    )
+    rows = _qn(
+        conn,
+        """
+        SELECT severity, COUNT(*)::int AS n
+          FROM mmwss.vapt_findings
+         WHERE source = 'internal_scan'
+           AND first_seen_at >= %s AND first_seen_at < %s
+         GROUP BY severity
+        """,
+        (start, end),
+    )
+    for r in rows:
+        out["new_in_period_by_sev"][r["severity"]] = r["n"]
+
+    out["open_by_scanner"] = _qn(
+        conn,
+        """
+        SELECT scanner,
+               COUNT(*)::int AS open_total,
+               COUNT(*) FILTER (WHERE severity = 'critical')::int AS open_critical,
+               COUNT(*) FILTER (WHERE severity = 'high')::int     AS open_high,
+               COUNT(*) FILTER (WHERE severity = 'medium')::int   AS open_medium,
+               COUNT(*) FILTER (WHERE severity = 'low')::int      AS open_low
+          FROM mmwss.vapt_findings
+         WHERE source = 'internal_scan' AND status IN ('open', 'in_progress')
+         GROUP BY scanner
+         ORDER BY open_total DESC
+        """,
+    )
+    av = _q1(
+        conn,
+        """
+        SELECT COUNT(*)::int AS n
+          FROM mmwss.vapt_findings
+         WHERE source = 'internal_scan'
+           AND verified_at >= %s AND verified_at < %s
+           AND consecutive_misses > 0
+        """,
+        (start, end),
+    )
+    out["auto_verified_in_period"] = av["n"] if av else 0
+
+    out["top_findings"] = _qn(
+        conn,
+        """
+        SELECT f.id, f.title, f.severity, f.scanner, f.scanner_template_id,
+               f.target_url, f.risk_score, f.first_seen_at, z.name AS zone_name
+          FROM mmwss.vapt_findings f
+          LEFT JOIN mmwss.zones z ON z.id = f.zone_id
+         WHERE f.source = 'internal_scan' AND f.status IN ('open', 'in_progress')
+         ORDER BY f.risk_score DESC NULLS LAST
+         LIMIT 10
+        """,
+    )
+
+    sh = _q1(
+        conn,
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE active)::int                                                            AS active_hosts,
+            COUNT(*) FILTER (WHERE first_seen_at >= %s AND first_seen_at < %s)::int                        AS new_hosts,
+            COUNT(*) FILTER (WHERE NOT active AND last_seen_at >= %s AND last_seen_at < %s)::int           AS lost_hosts
+          FROM mmwss.surface_hosts
+        """,
+        (start, end, start, end),
+    )
+    if sh:
+        out["surface_changes"] = sh
+    return out
+
+
 def _secs_to_human(s: int) -> str:
     if s < 60:   return f"{s}s"
     if s < 3600: return f"{s // 60}m"
@@ -574,6 +674,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
     change_by_cat  = _change_log_by_category(change_entries)
     vapt_summary   = _vapt_status_summary(conn, start, end)
     uptime_sites   = _uptime_per_site(conn, start, end)
+    scanner_summary = _scanner_summary(conn, start, end)
 
     # Bar-chart data: only sites with >0 threats, scaled to max=100
     max_threats = max((s["threats"] for s in sites), default=0)
@@ -611,6 +712,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         "change_entries": change_entries,
         "change_by_cat":  change_by_cat,
         "vapt_summary":   vapt_summary,
+        "scanner_summary": scanner_summary,
         "secs_to_human":  _secs_to_human,
     }
 

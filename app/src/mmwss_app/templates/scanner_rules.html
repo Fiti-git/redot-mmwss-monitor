@@ -1,0 +1,161 @@
+{% extends "_app_shell.html" %}
+{% block title %}Triage rules — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1400px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/scanners" class="hover:text-brand">Scanners</a> / Triage rules
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">Triage rules</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">
+      Deterministic false-positive suppression and severity override. Rules are matched in order of specificity (most specific first). Every rule fire is auditable.
+    </p>
+  </div>
+
+  {% if user.role == 'admin' %}
+  <details class="bg-white border border-line rounded-xl2 shadow-card">
+    <summary class="px-5 py-3 cursor-pointer font-semibold text-ink text-[14px] flex items-center justify-between hover:bg-surface-sunken">
+      <span>+ Add new rule</span>
+      <span class="text-[11px] text-ink-muted font-normal">all fields are wildcards if left blank</span>
+    </summary>
+    <form method="post" action="{{ base_path }}/scanners/rules/new" class="px-5 py-5 space-y-4 border-t border-line">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Name</label>
+          <input name="name" type="text" required maxlength="200" placeholder='e.g., "Suppress tech-detect from Nuclei"'
+                 class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+        </div>
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Action</label>
+          <select name="action" required class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px]">
+            {% for k, lbl in rule_action_label.items() %}
+            <option value="{{ k }}">{{ lbl }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Action value</label>
+          <input name="action_value" type="text" placeholder='target severity for upgrade/downgrade, or tag text'
+                 class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px]">
+          <div class="text-[11px] text-ink-subtle mt-1">For upgrade/downgrade: <code>critical</code>, <code>high</code>, <code>medium</code>, <code>low</code>, <code>info</code></div>
+        </div>
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Severity in (multi-select)</label>
+          <select name="severity_in" multiple size="3" class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px]">
+            <option value="critical">critical</option>
+            <option value="high">high</option>
+            <option value="medium">medium</option>
+            <option value="low">low</option>
+            <option value="info">info</option>
+          </select>
+          <div class="text-[11px] text-ink-subtle mt-1">Leave empty = applies to all severities</div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Scanner</label>
+          <select name="scanner" class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px]">
+            <option value="">— Any —</option>
+            {% for s in scanner_rows %}<option value="{{ s.name }}">{{ s.name }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Site</label>
+          <select name="zone_id" class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px]">
+            <option value="">— Any —</option>
+            {% for z in zones %}<option value="{{ z.id }}">{{ z.name }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Template ID pattern (glob)</label>
+        <input name="template_id_pattern" type="text" placeholder='e.g., "tech-detect/*" or "wp-plugin-outdated/*"'
+               class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px] font-mono">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">URL pattern (glob)</label>
+        <input name="url_pattern" type="text" placeholder='e.g., "*.staging.example.com/*"'
+               class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px] font-mono">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Title pattern (glob, case-insensitive)</label>
+        <input name="title_pattern" type="text" placeholder='e.g., "*outdated*jquery*"'
+               class="w-full h-10 px-3 bg-white border border-line rounded-lg text-[13.5px] font-mono">
+      </div>
+      <div>
+        <label class="block text-[12px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Notes</label>
+        <textarea name="notes" rows="2" placeholder="Why this rule exists. Reason will appear in audit logs."
+                  class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13px]"></textarea>
+      </div>
+      <button type="submit" class="h-10 px-5 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-md shadow-card">Create rule</button>
+    </form>
+  </details>
+  {% endif %}
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Name</th>
+          <th class="text-left px-5 py-3">Match</th>
+          <th class="text-left px-5 py-3">Action</th>
+          <th class="text-right px-5 py-3">Hits</th>
+          <th class="text-left px-5 py-3">Last hit</th>
+          <th class="text-left px-5 py-3">Enabled</th>
+          {% if user.role == 'admin' %}<th class="text-right px-5 py-3">Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rules %}
+        <tr class="border-t border-line hover:bg-surface-sunken {{ '' if r.enabled else 'opacity-50' }}">
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">#{{ r.id }}</td>
+          <td class="px-5 py-3 text-[13px] text-ink font-semibold max-w-xs">{{ r.name }}{% if r.notes %}<div class="text-[11px] text-ink-subtle font-normal mt-0.5">{{ r.notes }}</div>{% endif %}</td>
+          <td class="px-5 py-3 text-[11px] font-mono text-ink-muted max-w-md">
+            {% if r.scanner %}<div>scanner=<span class="text-ink">{{ r.scanner }}</span></div>{% endif %}
+            {% if r.template_id_pattern %}<div>template=<span class="text-ink">{{ r.template_id_pattern }}</span></div>{% endif %}
+            {% if r.url_pattern %}<div>url=<span class="text-ink">{{ r.url_pattern }}</span></div>{% endif %}
+            {% if r.title_pattern %}<div>title=<span class="text-ink">{{ r.title_pattern }}</span></div>{% endif %}
+            {% if r.zone_name %}<div>zone=<span class="text-ink">{{ r.zone_name }}</span></div>{% endif %}
+            {% if r.severity_in %}<div>severity_in=<span class="text-ink">{{ r.severity_in | join(',') }}</span></div>{% endif %}
+            {% if not (r.scanner or r.template_id_pattern or r.url_pattern or r.title_pattern or r.zone_name or r.severity_in) %}<span class="text-ink-subtle">(catch-all)</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px]">
+            <div class="font-semibold text-ink">{{ r.action }}</div>
+            {% if r.action_value %}<div class="text-[11px] text-ink-muted">{{ r.action_value }}</div>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-right tabular text-ink-muted">{{ r.hit_count }}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ r.last_hit_at | datetime_str if r.last_hit_at else '—' }}</td>
+          <td class="px-5 py-3 text-[12px]">{% if r.enabled %}<span class="text-ok-dark font-semibold">on</span>{% else %}<span class="text-ink-muted">off</span>{% endif %}</td>
+          {% if user.role == 'admin' %}
+          <td class="px-5 py-3 text-right text-[12px] flex gap-2 justify-end">
+            <form method="post" action="{{ base_path }}/scanners/rules/{{ r.id }}/toggle" class="inline">
+              <input type="hidden" name="enabled" value="{{ 'off' if r.enabled else 'on' }}">
+              <button class="text-brand hover:underline font-semibold">{{ 'disable' if r.enabled else 'enable' }}</button>
+            </form>
+            <form method="post" action="{{ base_path }}/scanners/rules/{{ r.id }}/delete" class="inline"
+                  onsubmit="return confirm('Delete rule #{{ r.id }}?')">
+              <button class="text-danger hover:underline font-semibold">delete</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 8 if user.role == 'admin' else 7 }}" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">No rules yet</div>
+            <div>Add rules above to suppress noisy findings or override severity.</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

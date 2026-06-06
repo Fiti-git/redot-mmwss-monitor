@@ -1,0 +1,229 @@
+{% extends "_app_shell.html" %}
+{% block title %}Scanners — MMWSS{% endblock %}
+
+{% macro sev_chip(s) %}
+{% set cls = {'critical':'bg-danger-soft text-danger-dark','high':'bg-warn-soft text-warn-dark',
+              'medium':'bg-info-soft text-info-dark','low':'bg-surface-sunken text-ink-muted',
+              'info':'bg-surface-sunken text-ink-subtle'}[s] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ sev_label[s] }}</span>
+{% endmacro %}
+
+{% macro status_chip(s) %}
+{% if s == 'open' %}<span class="inline-flex items-center gap-1 text-[11px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger"></span>open</span>
+{% elif s == 'in_progress' %}<span class="inline-flex items-center gap-1 text-[11px] text-warn-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-warn"></span>in progress</span>
+{% elif s == 'remediated' %}<span class="inline-flex items-center gap-1 text-[11px] text-info-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-info"></span>remediated</span>
+{% elif s == 'verified' %}<span class="inline-flex items-center gap-1 text-[11px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>verified</span>
+{% elif s == 'accepted_risk' %}<span class="text-[11px] text-ink-muted">accepted risk</span>
+{% else %}<span class="text-[11px] text-ink-muted">false positive</span>{% endif %}
+{% endmacro %}
+
+{% macro risk_bar(score) %}
+{% set s = (score or 0) | float %}
+{% set cls = 'bg-danger' if s >= 70 else ('bg-warn' if s >= 40 else ('bg-info' if s >= 20 else 'bg-ok')) %}
+<div class="flex items-center gap-1.5">
+  <div class="w-16 h-1.5 bg-surface-sunken rounded-full overflow-hidden">
+    <div class="h-full {{ cls }}" style="width: {{ s }}%"></div>
+  </div>
+  <span class="text-[11px] tabular text-ink-muted">{{ '%.0f' % s }}</span>
+</div>
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1500px]">
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">In-house VAPT scanners</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">
+        Continuous internal scanning across all managed sites. Findings flow through the same VAPT pipeline — auto-tickets, SLA timers, change-log on remediation.
+      </p>
+    </div>
+    <div class="flex gap-2">
+      <a href="{{ base_path }}/scanners/runs"        class="h-10 px-3.5 bg-white border border-line text-ink-muted hover:text-ink font-semibold text-[12.5px] rounded-lg inline-flex items-center">Scan runs</a>
+      <a href="{{ base_path }}/scanners/rules"       class="h-10 px-3.5 bg-white border border-line text-ink-muted hover:text-ink font-semibold text-[12.5px] rounded-lg inline-flex items-center">Triage rules</a>
+      <a href="{{ base_path }}/scanners/criticality" class="h-10 px-3.5 bg-white border border-line text-ink-muted hover:text-ink font-semibold text-[12.5px] rounded-lg inline-flex items-center">Asset criticality</a>
+      <a href="{{ base_path }}/scanners/surface"     class="h-10 px-3.5 bg-white border border-line text-ink-muted hover:text-ink font-semibold text-[12.5px] rounded-lg inline-flex items-center">Attack surface</a>
+    </div>
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open total</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.open_total > 0 else 'ink' }}">{{ counters.open_total }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open critical</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.open_critical > 0 else 'ink' }}">{{ counters.open_critical }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open high</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'warn' if counters.open_high > 0 else 'ink' }}">{{ counters.open_high }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">New (7d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.new_7d }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Auto-verified (30d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ok-dark">{{ counters.verified_30d }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Scans (7d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.runs_7d }}<span class="text-[12px] text-ink-muted">{% if counters.failed_runs_7d %} · <span class="text-danger">{{ counters.failed_runs_7d }} failed</span>{% endif %}</span></div>
+    </div>
+  </div>
+
+  <!-- Scanners overview -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold text-ink">Registered scanners</h2>
+      <div class="text-[12px] text-ink-muted">{{ scanner_rows | length }} active</div>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Scanner</th>
+          <th class="text-left px-5 py-3">Kind</th>
+          <th class="text-left px-5 py-3">Enabled</th>
+          <th class="text-left px-5 py-3">Last run</th>
+          <th class="text-right px-5 py-3">Total runs</th>
+          <th class="text-right px-5 py-3">Failed runs</th>
+          <th class="text-right px-5 py-3">Open findings</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in scanner_rows %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[13.5px]">
+            <div class="font-semibold text-ink">{{ scanner_label.get(s.name, s.name) }}</div>
+            <div class="text-[11px] text-ink-subtle">{{ s.description or '' }}</div>
+          </td>
+          <td class="px-5 py-3 text-[12px] font-mono text-ink-muted">{{ s.kind }}</td>
+          <td class="px-5 py-3 text-[12px]">{% if s.enabled %}<span class="text-ok-dark font-semibold">on</span>{% else %}<span class="text-ink-muted">off</span>{% endif %}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ s.last_run_at | datetime_str if s.last_run_at else '—' }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-right tabular text-ink">{{ s.total_runs }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-right tabular text-{{ 'danger' if s.failed_runs > 0 else 'ink-muted' }}">{{ s.failed_runs }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-right tabular text-{{ 'danger' if s.open_findings > 0 else 'ink-muted' }}">{{ s.open_findings }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 flex-wrap text-[12.5px]">
+    <span class="text-ink-muted font-medium">Scanner:</span>
+    <a href="{{ base_path }}/scanners" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_scanner else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for s in scanner_rows %}
+    <a href="{{ base_path }}/scanners?scanner={{ s.name }}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_scanner == s.name else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ s.name }}</a>
+    {% endfor %}
+    <span class="mx-2 text-ink-subtle">|</span>
+    <span class="text-ink-muted font-medium">Status:</span>
+    {% for st in ['open','in_progress','remediated','verified'] %}
+    <a href="{{ base_path }}/scanners?status={{ st }}{% if filter_scanner %}&scanner={{ filter_scanner }}{% endif %}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_status == st else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ status_label[st] }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Findings (top by risk score) -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold text-ink">Findings <span class="text-ink-muted font-normal">(sorted by risk score)</span></h2>
+      <div class="text-[12px] text-ink-muted">{{ findings | length }} shown</div>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Severity</th>
+          <th class="text-left px-5 py-3">Risk</th>
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Scanner / Template</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">CVE</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-left px-5 py-3">Last seen</th>
+          <th class="text-left px-5 py-3">Ticket</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">#{{ f.id }}</td>
+          <td class="px-5 py-3">{{ sev_chip(f.severity) }}</td>
+          <td class="px-5 py-3">{{ risk_bar(f.risk_score) }}</td>
+          <td class="px-5 py-3 text-[13px] max-w-md">
+            <a href="{{ base_path }}/vapt/findings/{{ f.id }}" class="text-ink font-semibold hover:text-brand line-clamp-2">{{ f.title }}</a>
+          </td>
+          <td class="px-5 py-3 text-[11px] font-mono text-ink-muted max-w-xs truncate">
+            <div>{{ f.scanner }}</div>
+            <div class="text-ink-subtle">{{ f.scanner_template_id }}</div>
+          </td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ f.zone_name or '—' }}</td>
+          <td class="px-5 py-3 text-[11px] font-mono text-ink-muted">{{ f.cve_reference or '—' }}</td>
+          <td class="px-5 py-3">{{ status_chip(f.status) }}</td>
+          <td class="px-5 py-3 text-[11.5px] text-ink-muted">{{ f.last_seen_at | datetime_str if f.last_seen_at else '—' }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if f.ticket_id %}<a href="{{ base_path }}/tickets/{{ f.ticket_id }}" class="text-brand hover:underline">#{{ f.ticket_id }}</a>
+            {% else %}<span class="text-ink-subtle">—</span>{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">No scanner findings yet</div>
+            <div>Scans run on schedule (headers + surface daily; nuclei, wpscan, testssl weekly). Findings appear here once a scan completes.</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Recent runs -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold text-ink">Recent scan runs</h2>
+      <a href="{{ base_path }}/scanners/runs" class="text-[12px] text-brand hover:underline font-semibold">View all →</a>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Scanner</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Started</th>
+          <th class="text-left px-5 py-3">Duration</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-right px-5 py-3">Total</th>
+          <th class="text-right px-5 py-3">New</th>
+          <th class="text-right px-5 py-3">Resolved</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_runs %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular"><a href="{{ base_path }}/scanners/runs/{{ r.id }}" class="hover:text-brand">#{{ r.id }}</a></td>
+          <td class="px-5 py-3 text-[12.5px] text-ink font-semibold">{{ r.scanner_name }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ r.zone_name }}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ r.started_at | datetime_str }}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">{{ r.duration_secs or '—' }}s</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if r.status == 'ok' %}<span class="text-ok-dark font-semibold">ok</span>
+            {% elif r.status == 'failed' %}<span class="text-danger font-semibold" title="{{ r.error_message }}">failed</span>
+            {% elif r.status == 'running' %}<span class="text-info-dark">running</span>
+            {% else %}<span class="text-ink-muted">{{ r.status }}</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-ink">{{ r.findings_total }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'warn-dark' if r.findings_new > 0 else 'ink-muted' }}">{{ r.findings_new }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'ok-dark' if r.findings_resolved > 0 else 'ink-muted' }}">{{ r.findings_resolved }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-5 py-12 text-center text-ink-muted text-[13px]">No scan runs yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

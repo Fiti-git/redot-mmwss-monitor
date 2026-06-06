@@ -21,6 +21,7 @@ from .routes import (
     auth_routes,
     change_log_routes,
     pages,
+    scanner_routes,
     ticket_routes,
     vapt_routes,
 )
@@ -70,6 +71,8 @@ vapt_routes.templates = templates
 app.include_router(vapt_routes.router, prefix=BASE_PATH)
 change_log_routes.templates = templates
 app.include_router(change_log_routes.router, prefix=BASE_PATH)
+scanner_routes.templates = templates
+app.include_router(scanner_routes.router, prefix=BASE_PATH)
 
 
 @app.get("/healthz")

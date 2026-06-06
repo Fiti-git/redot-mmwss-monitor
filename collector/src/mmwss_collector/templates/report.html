@@ -415,6 +415,130 @@
   {% endif %}
 </section>
 
+<!-- ── Internal scanner activity (proposal Section 5: internal validation scans) ── -->
+{% if scanner_summary %}
+<section>
+  <h2>Internal VAPT scanner activity</h2>
+  <p class="muted small" style="margin: -4px 0 8px 0;">In-house deterministic scanners (Nuclei, WPScan, testssl.sh, headers probe, attack-surface monitor) running on the schedule defined in the proposal. Findings flow through the same SLA pipeline as vendor-VAPT findings.</p>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">New findings</div>
+      <div class="value tabular">{{ scanner_summary.new_in_period_by_sev.values() | sum }}</div>
+      <div class="sub">
+        {% set sev_parts = [] %}
+        {% if scanner_summary.new_in_period_by_sev.get('critical', 0) > 0 %}{% set _ = sev_parts.append(scanner_summary.new_in_period_by_sev['critical'] ~ ' critical') %}{% endif %}
+        {% if scanner_summary.new_in_period_by_sev.get('high', 0) > 0 %}{% set _ = sev_parts.append(scanner_summary.new_in_period_by_sev['high'] ~ ' high') %}{% endif %}
+        {% if scanner_summary.new_in_period_by_sev.get('medium', 0) > 0 %}{% set _ = sev_parts.append(scanner_summary.new_in_period_by_sev['medium'] ~ ' medium') %}{% endif %}
+        {{ sev_parts | join(' · ') or 'no new findings' }}
+      </div>
+    </div>
+    <div class="kpi accent-green">
+      <div class="label">Auto-verified</div>
+      <div class="value tabular">{{ scanner_summary.auto_verified_in_period }}</div>
+      <div class="sub">no longer detected by scanner</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Active hosts (surface)</div>
+      <div class="value tabular">{{ scanner_summary.surface_changes.active_hosts }}</div>
+      <div class="sub">+{{ scanner_summary.surface_changes.new_hosts }} new · {{ scanner_summary.surface_changes.lost_hosts }} lost</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Open findings (total)</div>
+      <div class="value tabular">{{ scanner_summary.open_by_scanner | sum(attribute='open_total') }}</div>
+      <div class="sub">across all scanners</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 14px;">Scan runs &amp; coverage</h3>
+  <table style="margin-top: 6px;">
+    <thead>
+      <tr>
+        <th>Scanner</th>
+        <th class="right">Runs</th>
+        <th class="right">OK</th>
+        <th class="right">Failed</th>
+        <th class="right">Findings (total)</th>
+        <th class="right">New</th>
+        <th class="right">Resolved</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in scanner_summary.runs_in_period %}
+      <tr>
+        <td><strong>{{ r.scanner }}</strong></td>
+        <td class="right tabular">{{ r.runs }}</td>
+        <td class="right tabular">{{ r.runs_ok }}</td>
+        <td class="right tabular">{% if r.runs_failed > 0 %}<span style="color:#C0282E">{{ r.runs_failed }}</span>{% else %}0{% endif %}</td>
+        <td class="right tabular">{{ r.findings_total }}</td>
+        <td class="right tabular">{{ r.findings_new }}</td>
+        <td class="right tabular">{{ r.findings_resolved }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+
+  {% if scanner_summary.open_by_scanner %}
+  <h3 style="margin-top: 14px;">Open findings by scanner</h3>
+  <table style="margin-top: 6px;">
+    <thead>
+      <tr>
+        <th>Scanner</th>
+        <th class="right">Open total</th>
+        <th class="right">Critical</th>
+        <th class="right">High</th>
+        <th class="right">Medium</th>
+        <th class="right">Low</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in scanner_summary.open_by_scanner %}
+      <tr>
+        <td><strong>{{ r.scanner }}</strong></td>
+        <td class="right tabular">{{ r.open_total }}</td>
+        <td class="right tabular">{% if r.open_critical > 0 %}<span style="color:#C0282E">{{ r.open_critical }}</span>{% else %}0{% endif %}</td>
+        <td class="right tabular">{% if r.open_high > 0 %}<span style="color:#B45309">{{ r.open_high }}</span>{% else %}0{% endif %}</td>
+        <td class="right tabular">{{ r.open_medium }}</td>
+        <td class="right tabular">{{ r.open_low }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  {% if scanner_summary.top_findings %}
+  <h3 style="margin-top: 14px;">Top open findings by risk score</h3>
+  <table style="margin-top: 6px;">
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th>Severity</th>
+        <th>Scanner</th>
+        <th>Title</th>
+        <th class="right">Risk</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for f in scanner_summary.top_findings %}
+      <tr>
+        <td class="muted">{{ f.zone_name or '—' }}</td>
+        <td>
+          {% if f.severity == 'critical' %}<span class="pill red">critical</span>
+          {% elif f.severity == 'high' %}<span class="pill amber">high</span>
+          {% elif f.severity == 'medium' %}<span class="pill blue">medium</span>
+          {% else %}<span class="pill grey">{{ f.severity }}</span>{% endif %}
+        </td>
+        <td class="muted small">{{ f.scanner }}</td>
+        <td>{{ f.title }}</td>
+        <td class="right tabular"><strong>{{ '%.0f'|format(f.risk_score or 0) }}</strong></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if recommendations %}
 <section>
   <h2>Cloudflare recommendations</h2>

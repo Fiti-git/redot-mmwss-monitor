@@ -1,0 +1,77 @@
+{% extends "_app_shell.html" %}
+{% block title %}Scan runs — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1500px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/scanners" class="hover:text-brand">Scanners</a> / Scan runs
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">Scan runs</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">Every scanner execution with counts, status, and raw-artifact path for audit.</p>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 flex-wrap text-[12.5px]">
+    <span class="text-ink-muted font-medium">Scanner:</span>
+    <a href="{{ base_path }}/scanners/runs" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_scanner_id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for s in scanner_rows %}
+    <a href="{{ base_path }}/scanners/runs?scanner_id={{ s.id }}{% if filter_zone_id %}&zone_id={{ filter_zone_id }}{% endif %}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_scanner_id == s.id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ s.name }}</a>
+    {% endfor %}
+    <span class="mx-2 text-ink-subtle">|</span>
+    <span class="text-ink-muted font-medium">Site:</span>
+    <a href="{{ base_path }}/scanners/runs{% if filter_scanner_id %}?scanner_id={{ filter_scanner_id }}{% endif %}" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_zone_id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for z in zones %}
+    <a href="{{ base_path }}/scanners/runs?zone_id={{ z.id }}{% if filter_scanner_id %}&scanner_id={{ filter_scanner_id }}{% endif %}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_zone_id == z.id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ z.name }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Scanner</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Target</th>
+          <th class="text-left px-5 py-3">Started</th>
+          <th class="text-left px-5 py-3">Duration</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-right px-5 py-3">Total</th>
+          <th class="text-right px-5 py-3">New</th>
+          <th class="text-right px-5 py-3">Resolved</th>
+          <th class="text-right px-5 py-3">Suppressed</th>
+          <th class="text-left px-5 py-3">Triggered</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in runs %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular"><a href="{{ base_path }}/scanners/runs/{{ r.id }}" class="hover:text-brand">#{{ r.id }}</a></td>
+          <td class="px-5 py-3 text-[12.5px] text-ink font-semibold">{{ r.scanner_name }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ r.zone_name }}</td>
+          <td class="px-5 py-3 text-[11.5px] font-mono text-ink-muted max-w-xs truncate" title="{{ r.target_url }}">{{ r.target_url }}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ r.started_at | datetime_str }}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">{% if r.duration_secs %}{{ r.duration_secs }}s{% else %}—{% endif %}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if r.status == 'ok' %}<span class="text-ok-dark font-semibold">ok</span>
+            {% elif r.status == 'failed' %}<span class="text-danger font-semibold" title="{{ r.error_message }}">failed</span>
+            {% elif r.status == 'running' %}<span class="text-info-dark">running</span>
+            {% else %}<span class="text-ink-muted">{{ r.status }}</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-ink">{{ r.findings_total }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'warn-dark' if r.findings_new > 0 else 'ink-muted' }}">{{ r.findings_new }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'ok-dark' if r.findings_resolved > 0 else 'ink-muted' }}">{{ r.findings_resolved }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-ink-muted">{{ r.findings_suppressed }}</td>
+          <td class="px-5 py-3 text-[11.5px] font-mono text-ink-muted">{{ r.triggered_by }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="12" class="px-5 py-12 text-center text-ink-muted text-[13px]">No scan runs match these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

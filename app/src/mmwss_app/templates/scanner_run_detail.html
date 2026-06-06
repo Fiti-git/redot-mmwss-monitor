@@ -1,0 +1,97 @@
+{% extends "_app_shell.html" %}
+{% block title %}Scan run #{{ run.id }} — MMWSS{% endblock %}
+
+{% macro sev_chip(s) %}
+{% set cls = {'critical':'bg-danger-soft text-danger-dark','high':'bg-warn-soft text-warn-dark',
+              'medium':'bg-info-soft text-info-dark','low':'bg-surface-sunken text-ink-muted',
+              'info':'bg-surface-sunken text-ink-subtle'}[s] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ sev_label[s] }}</span>
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1300px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/scanners" class="hover:text-brand">Scanners</a> /
+      <a href="{{ base_path }}/scanners/runs" class="hover:text-brand">Scan runs</a> / #{{ run.id }}
+    </div>
+    <h1 class="text-[22px] font-bold text-ink tracking-tight">
+      {{ run.scanner_name }} scan of {{ run.zone_name }}
+    </h1>
+    <div class="text-[12.5px] text-ink-muted mt-1">
+      Started {{ run.started_at | datetime_str }}
+      {% if run.finished_at %}· finished {{ run.finished_at | datetime_str }} ({{ run.duration_secs }}s){% endif %}
+      · triggered <span class="font-mono">{{ run.triggered_by }}</span>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-6 gap-3">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">Status</div>
+      <div class="mt-1 text-[18px] font-bold {{ 'text-ok-dark' if run.status == 'ok' else ('text-danger' if run.status == 'failed' else 'text-info-dark') }}">{{ run.status }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">Total findings</div>
+      <div class="mt-1 text-[22px] font-bold tabular">{{ run.findings_total }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">New</div>
+      <div class="mt-1 text-[22px] font-bold tabular text-{{ 'warn-dark' if run.findings_new > 0 else 'ink' }}">{{ run.findings_new }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">Resolved</div>
+      <div class="mt-1 text-[22px] font-bold tabular text-{{ 'ok-dark' if run.findings_resolved > 0 else 'ink' }}">{{ run.findings_resolved }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">Suppressed</div>
+      <div class="mt-1 text-[22px] font-bold tabular">{{ run.findings_suppressed }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase text-ink-muted font-semibold">Duration</div>
+      <div class="mt-1 text-[22px] font-bold tabular">{{ run.duration_secs or '—' }}s</div>
+    </div>
+  </div>
+
+  {% if run.error_message %}
+  <div class="bg-danger-soft border border-danger/20 rounded-xl2 p-4">
+    <div class="text-[12px] uppercase tracking-wider font-semibold text-danger-dark mb-1">Error</div>
+    <div class="text-[13px] text-danger-dark font-mono whitespace-pre-wrap">{{ run.error_message }}</div>
+  </div>
+  {% endif %}
+
+  {% if run.raw_artifact_path %}
+  <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+    <div class="text-[12px] uppercase tracking-wider font-semibold text-ink-muted mb-1">Raw artifact</div>
+    <div class="text-[12px] font-mono text-ink-muted">{{ run.raw_artifact_path }}</div>
+  </div>
+  {% endif %}
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Findings touched by this run</h2></div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Severity</th>
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Template</th>
+          <th class="text-left px-5 py-3">URL</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in findings %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">#{{ f.id }}</td>
+          <td class="px-5 py-3">{{ sev_chip(f.severity) }}</td>
+          <td class="px-5 py-3 text-[13px]"><a href="{{ base_path }}/vapt/findings/{{ f.id }}" class="text-ink font-semibold hover:text-brand">{{ f.title }}</a></td>
+          <td class="px-5 py-3 text-[11px] font-mono text-ink-muted">{{ f.scanner_template_id }}</td>
+          <td class="px-5 py-3 text-[11px] font-mono text-ink-muted max-w-xs truncate" title="{{ f.target_url }}">{{ f.target_url }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="px-5 py-10 text-center text-ink-muted text-[13px]">No findings recorded for this run.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

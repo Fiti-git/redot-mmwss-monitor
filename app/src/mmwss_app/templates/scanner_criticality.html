@@ -1,0 +1,67 @@
+{% extends "_app_shell.html" %}
+{% block title %}Asset criticality — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1100px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/scanners" class="hover:text-brand">Scanners</a> / Asset criticality
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">Asset criticality multipliers</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">
+      Per-site multiplier (0.1 – 5.0, default 1.0) applied to the risk-score formula. Set high-value sites (donation portals, member areas) to 2.0; parked or non-prod to 0.5.
+    </p>
+  </div>
+
+  <div class="bg-info-soft border border-info/20 rounded-xl2 p-4">
+    <div class="text-[12px] uppercase text-info-dark font-semibold mb-1">Risk score formula</div>
+    <div class="text-[13px] text-ink font-mono">
+      risk = (CVSS/10 × 50%) + (EPSS × 30%) + (criticality_multiplier/2 × 20%)
+    </div>
+    <div class="text-[12px] text-ink-muted mt-1">Result is clamped to 0–100 and stored on each finding.</div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3" style="width: 12rem">Multiplier</th>
+          <th class="text-left px-5 py-3">Notes</th>
+          <th class="text-left px-5 py-3">Last updated</th>
+          {% if user.role == 'admin' %}<th class="text-right px-5 py-3" style="width: 7rem">Save</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr class="border-t border-line">
+          {% if user.role == 'admin' %}
+          <form method="post" action="{{ base_path }}/scanners/criticality/{{ r.zone_id }}">
+            <td class="px-5 py-3 text-[13.5px] text-ink font-semibold">{{ r.zone_name }}</td>
+            <td class="px-5 py-3">
+              <input name="criticality_multiplier" type="number" step="0.1" min="0.1" max="5.0"
+                     value="{{ '%.1f' % r.criticality_multiplier }}"
+                     class="w-28 h-9 px-2 bg-white border border-line rounded text-[13px] tabular">
+            </td>
+            <td class="px-5 py-3">
+              <input name="notes" type="text" value="{{ r.notes or '' }}" placeholder="why this multiplier"
+                     class="w-full h-9 px-2 bg-white border border-line rounded text-[12.5px]">
+            </td>
+            <td class="px-5 py-3 text-[11.5px] text-ink-muted">{{ r.updated_at | datetime_str if r.updated_at else '—' }}{% if r.updated_by_email %} · {{ r.updated_by_email }}{% endif %}</td>
+            <td class="px-5 py-3 text-right">
+              <button class="h-9 px-3 bg-brand hover:bg-brand-600 text-white font-semibold text-[12.5px] rounded">Save</button>
+            </td>
+          </form>
+          {% else %}
+            <td class="px-5 py-3 text-[13.5px] text-ink font-semibold">{{ r.zone_name }}</td>
+            <td class="px-5 py-3 text-[13px] tabular">{{ '%.1f' % r.criticality_multiplier }}</td>
+            <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ r.notes or '—' }}</td>
+            <td class="px-5 py-3 text-[11.5px] text-ink-muted">{{ r.updated_at | datetime_str if r.updated_at else '—' }}</td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

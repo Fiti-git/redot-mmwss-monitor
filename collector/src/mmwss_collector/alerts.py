@@ -144,6 +144,36 @@ def notify_incident_resolved(settings, conn, *, zone_id: int, zone_name: str,
         log.exception("Slack resolve failed: incident #%d", incident_id)
 
 
+def notify_scanner_finding(settings, conn, *, zone_id: int, zone_name: str,
+                           finding_id: int, ticket_id: int | None,
+                           severity: str, title: str, scanner: str) -> None:
+    """Alert on a brand-new internal-scanner finding (critical/high only)."""
+    if not settings.slack_webhook_url:
+        return
+    if severity not in ("critical", "high"):
+        return
+    dedupe_key = f"scanner_finding:{finding_id}"
+    if _recently_sent(conn, channel="slack", dedupe_key=dedupe_key):
+        return
+    alert_sev = "critical" if severity == "critical" else "warning"
+    dashboard_url = f"{settings.mmwss_public_url}/mmwss/vapt/findings/{finding_id}"
+    summary_lines = [f"*{title}*", f"Scanner: `{scanner}` · Severity: *{severity.upper()}*"]
+    if ticket_id:
+        summary_lines.append(f"Auto-ticket: <{settings.mmwss_public_url}/mmwss/tickets/{ticket_id}|#{ticket_id}>")
+    payload = _build_slack_payload(
+        severity=alert_sev, zone_name=zone_name, summary="\n".join(summary_lines),
+        dashboard_url=dashboard_url,
+        footer=f"_Internal VAPT scan · finding #{finding_id} · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}_",
+    )
+    try:
+        _post_slack(settings.slack_webhook_url, payload)
+        _record(conn, zone_id=zone_id, incident_id=None, channel="slack",
+                event_type="scanner_finding", dedupe_key=dedupe_key, payload=payload)
+        log.info("Slack alert sent: scanner finding #%d (%s)", finding_id, scanner)
+    except Exception:
+        log.exception("Slack alert failed for scanner finding #%d", finding_id)
+
+
 def notify_test(settings, conn) -> bool:
     """Manual test fire — invoked from `python -m mmwss_collector test_alert`."""
     if not settings.slack_webhook_url:
