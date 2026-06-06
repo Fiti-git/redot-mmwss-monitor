@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import db, jobs
+from . import alerts, db, jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -97,10 +97,19 @@ def cmd_scheduler(settings) -> int:
     return 0
 
 
+def cmd_test_alert(settings) -> int:
+    """Send a test Slack alert to verify the webhook is wired up."""
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)  # ensure mmwss.alerts table exists
+        ok = alerts.notify_test(settings, conn)
+    return 0 if ok else 1
+
+
 COMMANDS = {
     "migrate": cmd_migrate,
     "sync": cmd_sync,
     "scheduler": cmd_scheduler,
+    "test_alert": cmd_test_alert,
 }
 
 

@@ -60,6 +60,8 @@ services:
       MMWSS_MASTER_KEY: ${MMWSS_MASTER_KEY}
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
       CLOUDFLARE_TOKEN_LABEL: ${CLOUDFLARE_TOKEN_LABEL:-primary}
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      MMWSS_PUBLIC_URL: ${MMWSS_PUBLIC_URL:-https://coldcalling.redotglobal.agency}
     depends_on:
       db:
         condition: service_healthy

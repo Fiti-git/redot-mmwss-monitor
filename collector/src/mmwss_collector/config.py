@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     uptime_probe_timeout_s: int = 10
     cf_user_agent: str = "mmwss-collector/0.1"
 
+    # Slack incoming webhook URL (empty disables Slack alerts).
+    slack_webhook_url: str = ""
+
+    # Public base URL of MMWSS UI — used to build "View in MMWSS" buttons in alerts.
+    mmwss_public_url: str = "https://coldcalling.redotglobal.agency"
+
 
 def load() -> Settings:
     return Settings()

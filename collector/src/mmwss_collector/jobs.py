@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from . import db
+from . import alerts, db
 from .cloudflare import CloudflareClient, CloudflareError
 from .config import Settings
 
@@ -62,21 +62,36 @@ def probe_uptime(settings: Settings, conn) -> int:
             )
             open_incident = cur.fetchone()
             if len(last_two) == 2 and not any(last_two) and not open_incident:
+                summary = f"{z['name']} appears down (2 consecutive failed probes)"
+                details = {"last_status": status_code, "last_error": error, "latency_ms": latency_ms}
                 cur.execute(
                     """
                     INSERT INTO mmwss.incidents (zone_id, type, severity, summary, details_json)
                     VALUES (%s, 'site_down', 'critical', %s, %s::jsonb)
+                    RETURNING id
                     """,
-                    (zid, f"{z['name']} appears down (2 consecutive failed probes)",
-                     json.dumps({"last_status": status_code, "last_error": error, "latency_ms": latency_ms})),
+                    (zid, summary, json.dumps(details)),
                 )
-                log.warning("Opened incident: %s down", z["name"])
+                new_id = cur.fetchone()["id"]
+                log.warning("Opened incident #%d: %s down", new_id, z["name"])
+                conn.commit()
+                alerts.notify_incident_opened(
+                    settings, conn,
+                    zone_id=zid, zone_name=z["name"], incident_id=new_id,
+                    severity="critical", summary=summary, details=details,
+                )
             elif len(last_two) == 2 and all(last_two) and open_incident:
                 cur.execute(
                     "UPDATE mmwss.incidents SET ended_at = now() WHERE id = %s",
                     (open_incident["id"],),
                 )
-                log.info("Closed incident: %s recovered", z["name"])
+                conn.commit()
+                log.info("Closed incident #%d: %s recovered", open_incident["id"], z["name"])
+                alerts.notify_incident_resolved(
+                    settings, conn,
+                    zone_id=zid, zone_name=z["name"], incident_id=open_incident["id"],
+                    summary=f"{z['name']} has been responding successfully for 2+ consecutive probes.",
+                )
         conn.commit()
     return len(zones)
 
@@ -211,15 +226,24 @@ def take_snapshot(settings: Settings, conn) -> int:
                             (z["id"],),
                         )
                         if not cur.fetchone():
+                            severity = "warning" if days >= 7 else "critical"
+                            summary = f"{z['name']} SSL expires in {days} days"
                             cur.execute(
                                 """
                                 INSERT INTO mmwss.incidents (zone_id, type, severity, summary, details_json)
                                 VALUES (%s, 'ssl_expiring', %s, %s, %s::jsonb)
+                                RETURNING id
                                 """,
-                                (z["id"],
-                                 "warning" if days >= 7 else "critical",
-                                 f"{z['name']} SSL expires in {days} days",
+                                (z["id"], severity, summary,
                                  json.dumps({"expires_on": soonest_expiry, "days_remaining": days})),
+                            )
+                            ssl_inc_id = cur.fetchone()["id"]
+                            conn.commit()
+                            alerts.notify_incident_opened(
+                                settings, conn,
+                                zone_id=z["id"], zone_name=z["name"],
+                                incident_id=ssl_inc_id, severity=severity, summary=summary,
+                                details={"days_remaining": days, "expires_on": soonest_expiry},
                             )
                 except ValueError:
                     pass
