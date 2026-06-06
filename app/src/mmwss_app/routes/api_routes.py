@@ -54,48 +54,74 @@ def apply_fix(req: FixRequest, request: Request, user: dict = Depends(auth.requi
     if not zone:
         raise HTTPException(404, "Zone not found or inactive.")
 
-    setting_id, new_value = fixers.setting_change(req.rule_id)
+    fix = fixers.get_fix(req.rule_id)
 
-    # 4. Capture the "before" value for the audit log
-    snap = db.fetch_one(
-        "SELECT id, settings_json FROM mmwss.zone_snapshots WHERE zone_id = %s ORDER BY captured_at DESC LIMIT 1",
-        (zone["id"],),
-    )
-    before = (snap["settings_json"] if snap else {}) .get(setting_id) if snap else None
-
-    # 5. Apply via Cloudflare API
-    try:
-        result = cf_client.patch_zone_setting(zone["cf_zone_id"], setting_id, new_value)
-    except cf_client.CloudflareApiError as e:
-        log.warning("CF fix failed: zone=%s rule=%s err=%s", zone["name"], req.rule_id, e)
-        auth.record_audit(int(user["id"]), user["email"], "cf_fix.cf_error", ip=ip,
-                          target_type="zone", target_id=str(req.zone_id),
-                          details={"rule_id": req.rule_id, "setting": setting_id,
-                                   "intended_value": new_value, "error": str(e)})
-        raise HTTPException(502, f"Cloudflare API rejected the change: {e}")
-
-    # 6. Optimistically reflect the new value in the latest snapshot so the
-    #    UI updates immediately. Next 6-hourly snapshot will reconcile with
-    #    Cloudflare's actual state.
-    if snap:
-        db.execute(
-            "UPDATE mmwss.zone_snapshots SET settings_json = jsonb_set(settings_json, %s, %s::jsonb) WHERE id = %s",
-            ("{" + setting_id + "}", json.dumps(new_value), snap["id"]),
+    # 4. Apply via Cloudflare — dispatch by fix kind
+    if fix.kind == "setting":
+        snap = db.fetch_one(
+            "SELECT id, settings_json FROM mmwss.zone_snapshots WHERE zone_id = %s ORDER BY captured_at DESC LIMIT 1",
+            (zone["id"],),
         )
+        before = (snap["settings_json"] or {}).get(fix.target) if snap else None
+        try:
+            result = cf_client.patch_zone_setting(zone["cf_zone_id"], fix.target, fix.value)
+        except cf_client.CloudflareApiError as e:
+            log.warning("CF fix failed (setting): zone=%s rule=%s err=%s", zone["name"], req.rule_id, e)
+            auth.record_audit(int(user["id"]), user["email"], "cf_fix.cf_error", ip=ip,
+                              target_type="zone", target_id=str(req.zone_id),
+                              details={"rule_id": req.rule_id, "kind": "setting",
+                                       "setting": fix.target, "intended_value": fix.value,
+                                       "error": str(e)})
+            raise HTTPException(502, f"Cloudflare API rejected the change: {e}")
+        # Optimistic snapshot update
+        if snap:
+            db.execute(
+                "UPDATE mmwss.zone_snapshots SET settings_json = jsonb_set(settings_json, %s, %s::jsonb) WHERE id = %s",
+                ("{" + fix.target + "}", json.dumps(fix.value), snap["id"]),
+            )
+        auth.record_audit(int(user["id"]), user["email"], "cf_fix.applied", ip=ip,
+                          target_type="zone", target_id=str(req.zone_id),
+                          details={"rule_id": req.rule_id, "kind": "setting",
+                                   "setting": fix.target, "before": before, "after": fix.value,
+                                   "cf_result": result})
+        log.info("CF fix applied by %s: %s.%s %s -> %s", user["email"], zone["name"],
+                 fix.target, before, fix.value)
+        return {"success": True, "zone": zone["name"], "kind": "setting",
+                "setting": fix.target, "before": before, "after": fix.value}
 
-    # 7. Audit
-    auth.record_audit(int(user["id"]), user["email"], "cf_fix.applied", ip=ip,
-                      target_type="zone", target_id=str(req.zone_id),
-                      details={"rule_id": req.rule_id, "setting": setting_id,
-                               "before": before, "after": new_value,
-                               "cf_result": result})
+    elif fix.kind == "block_path":
+        description = f"MMWSS auto-fix: block {fix.target} ({req.rule_id})"
+        try:
+            result = cf_client.add_block_path_rule(zone["cf_zone_id"], fix.target, description)
+        except cf_client.CloudflareApiError as e:
+            log.warning("CF fix failed (block_path): zone=%s rule=%s err=%s", zone["name"], req.rule_id, e)
+            auth.record_audit(int(user["id"]), user["email"], "cf_fix.cf_error", ip=ip,
+                              target_type="zone", target_id=str(req.zone_id),
+                              details={"rule_id": req.rule_id, "kind": "block_path",
+                                       "path": fix.target, "error": str(e)})
+            raise HTTPException(502, f"Cloudflare API rejected the change: {e}")
+        already = bool(result.get("already_exists"))
+        # Bump the firewall counts on the latest snapshot so UI reflects the new rule.
+        # (Only if we actually added a new rule.)
+        if not already:
+            db.execute(
+                """
+                UPDATE mmwss.zone_snapshots
+                SET fw_rules_total = COALESCE(fw_rules_total, 0) + 1,
+                    fw_rules_enabled = COALESCE(fw_rules_enabled, 0) + 1
+                WHERE id = (SELECT id FROM mmwss.zone_snapshots WHERE zone_id = %s ORDER BY captured_at DESC LIMIT 1)
+                """,
+                (zone["id"],),
+            )
+        auth.record_audit(int(user["id"]), user["email"], "cf_fix.applied", ip=ip,
+                          target_type="zone", target_id=str(req.zone_id),
+                          details={"rule_id": req.rule_id, "kind": "block_path",
+                                   "path": fix.target, "already_existed": already,
+                                   "cf_result": result})
+        log.info("CF firewall rule added by %s: %s block %s%s", user["email"], zone["name"],
+                 fix.target, " (already existed)" if already else "")
+        return {"success": True, "zone": zone["name"], "kind": "block_path",
+                "path": fix.target, "already_existed": already}
 
-    log.info("CF fix applied by %s: %s.%s %s -> %s", user["email"], zone["name"],
-             setting_id, before, new_value)
-    return {
-        "success": True,
-        "zone": zone["name"],
-        "setting": setting_id,
-        "before": before,
-        "after": new_value,
-    }
+    else:
+        raise HTTPException(500, f"Unknown fix kind: {fix.kind}")

@@ -14,7 +14,7 @@
 
 {% macro rec_card(r) %}
 {% set border = 'border-l-danger' if r.severity == 'critical' else ('border-l-warn' if r.severity == 'warning' else 'border-l-info') %}
-{% set fixable = (r.source == 'cloudflare') and (r.rule_id in fixable_rules) %}
+{% set fixable = r.rule_id in fixable_rules %}
 <div class="bg-white border border-line border-l-4 {{ border }} rounded-r-lg p-4 mb-2.5 shadow-card">
   <div class="flex items-start justify-between gap-3 mb-1.5">
     <div class="flex items-center gap-2 flex-wrap">
@@ -40,7 +40,7 @@
       </svg>
       One-click fix
     </button>
-    <span class="text-[11px] text-ink-muted">{{ fixable_rules[r.rule_id] }} via Cloudflare API</span>
+    <span class="text-[11px] text-ink-muted">{{ fixable_rules[r.rule_id] }} via Cloudflare</span>
   </div>
   {% endif %}
 </div>

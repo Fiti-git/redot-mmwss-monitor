@@ -35,6 +35,26 @@ def _active_token() -> str:
     return r["token"]
 
 
+def _headers(token: str) -> dict:
+    return {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+        "User-Agent": "MMWSS-Fix/0.1",
+    }
+
+
+def _first_error(data: dict) -> str:
+    errs = data.get("errors") or []
+    return errs[0].get("message") if errs else "unknown error"
+
+
+def _touch_token() -> None:
+    db.execute(
+        "UPDATE mmwss.cf_tokens SET last_used_at = now() WHERE id = (SELECT MIN(id) FROM mmwss.cf_tokens)",
+        (),
+    )
+
+
 def patch_zone_setting(cf_zone_id: str, setting_id: str, value) -> dict:
     """PATCH /zones/{cf_zone_id}/settings/{setting_id} with {"value": value}.
 
@@ -42,14 +62,9 @@ def patch_zone_setting(cf_zone_id: str, setting_id: str, value) -> dict:
     returns CF's `result` payload (current setting state after the change).
     """
     token = _active_token()
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json",
-        "User-Agent": "MMWSS-Fix/0.1",
-    }
     url = f"{_CF_BASE}/zones/{cf_zone_id}/settings/{setting_id}"
     try:
-        r = requests.patch(url, json={"value": value}, headers=headers, timeout=_TIMEOUT)
+        r = requests.patch(url, json={"value": value}, headers=_headers(token), timeout=_TIMEOUT)
     except requests.RequestException as e:
         raise CloudflareApiError(f"network error: {e}")
     try:
@@ -57,9 +72,79 @@ def patch_zone_setting(cf_zone_id: str, setting_id: str, value) -> dict:
     except ValueError:
         raise CloudflareApiError(f"non-JSON response (HTTP {r.status_code})")
     if not data.get("success"):
-        errs = data.get("errors") or []
-        msg = errs[0].get("message") if errs else f"HTTP {r.status_code}"
-        raise CloudflareApiError(msg)
-    # Touch last_used_at so we know the token is in active service
-    db.execute("UPDATE mmwss.cf_tokens SET last_used_at = now() WHERE id = (SELECT MIN(id) FROM mmwss.cf_tokens)", ())
+        raise CloudflareApiError(_first_error(data))
+    _touch_token()
+    return data.get("result", {})
+
+
+# ───────── Custom firewall rules (Rulesets API) ─────────
+
+
+_FW_PHASE = "http_request_firewall_custom"
+
+
+def _get_or_create_custom_ruleset(cf_zone_id: str, token: str) -> tuple[str, list[dict]]:
+    """Return (ruleset_id, existing_rules) for the custom-firewall entrypoint.
+    If it doesn't exist yet, create an empty one and return its id."""
+    headers = _headers(token)
+    url = f"{_CF_BASE}/zones/{cf_zone_id}/rulesets/phases/{_FW_PHASE}/entrypoint"
+    try:
+        r = requests.get(url, headers=headers, timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        raise CloudflareApiError(f"network error: {e}")
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError:
+            raise CloudflareApiError("non-JSON entrypoint response")
+        if data.get("success"):
+            return data["result"]["id"], data["result"].get("rules", []) or []
+        raise CloudflareApiError(_first_error(data))
+    if r.status_code == 404:
+        # Phase ruleset not yet created — PUT an empty one to materialize it.
+        try:
+            r2 = requests.put(url, json={"rules": []}, headers=headers, timeout=_TIMEOUT)
+            data2 = r2.json()
+        except (requests.RequestException, ValueError) as e:
+            raise CloudflareApiError(f"creating entrypoint: {e}")
+        if not data2.get("success"):
+            raise CloudflareApiError(_first_error(data2))
+        return data2["result"]["id"], []
+    raise CloudflareApiError(f"HTTP {r.status_code} fetching entrypoint")
+
+
+def add_block_path_rule(cf_zone_id: str, path: str, description: str) -> dict:
+    """Block all requests whose URI path exactly matches `path` by appending
+    a rule to the zone's custom firewall ruleset. Idempotent: if an equivalent
+    rule already exists, returns that rule unchanged."""
+    token = _active_token()
+    ruleset_id, existing_rules = _get_or_create_custom_ruleset(cf_zone_id, token)
+
+    expression = f'(http.request.uri.path eq "{path}")'
+
+    # Idempotency: don't add the same rule twice
+    for r in existing_rules:
+        if (r.get("expression") == expression
+                and r.get("action") == "block"
+                and not r.get("paused", False)):
+            return {"already_exists": True, "rule_id": r.get("id"), "expression": expression}
+
+    payload = {
+        "expression": expression,
+        "action": "block",
+        "description": description[:255],
+        "enabled": True,
+    }
+    url = f"{_CF_BASE}/zones/{cf_zone_id}/rulesets/{ruleset_id}/rules"
+    try:
+        r = requests.post(url, json=payload, headers=_headers(token), timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        raise CloudflareApiError(f"network error: {e}")
+    try:
+        data = r.json()
+    except ValueError:
+        raise CloudflareApiError(f"non-JSON response (HTTP {r.status_code})")
+    if not data.get("success"):
+        raise CloudflareApiError(_first_error(data))
+    _touch_token()
     return data.get("result", {})
