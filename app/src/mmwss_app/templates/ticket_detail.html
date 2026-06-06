@@ -1,0 +1,165 @@
+{% extends "_app_shell.html" %}
+{% block title %}#{{ t.id }} — {{ t.title }} — MMWSS{% endblock %}
+
+{% macro priority_chip(p) %}
+{% set cls = {'p1': 'bg-danger-soft text-danger-dark', 'p2': 'bg-warn-soft text-warn-dark',
+              'p3': 'bg-info-soft text-info-dark', 'p4': 'bg-surface-sunken text-ink-muted'}[p] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ p }}</span>
+{% endmacro %}
+
+{% macro status_chip(s) %}
+{% if s == 'open' %}<span class="inline-flex items-center gap-1 text-[12px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></span>open</span>
+{% elif s == 'in_progress' %}<span class="inline-flex items-center gap-1 text-[12px] text-warn-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-warn"></span>in progress</span>
+{% elif s == 'resolved' %}<span class="inline-flex items-center gap-1 text-[12px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>resolved</span>
+{% else %}<span class="inline-flex items-center gap-1 text-[12px] text-ink-muted"><span class="w-1.5 h-1.5 rounded-full bg-ink-subtle"></span>closed</span>{% endif %}
+{% endmacro %}
+
+{% macro sla_pill(state) %}
+{% if state == 'met' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-ok-soft text-ok-dark">met</span>
+{% elif state == 'breached' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">breached</span>
+{% else %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">on track</span>{% endif %}
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1100px]">
+  <!-- Breadcrumb + header -->
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/tickets" class="hover:text-brand">Tickets</a> / #{{ t.id }}
+    </div>
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1.5">
+          {{ priority_chip(t.priority) }}
+          <span class="text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted font-mono">{{ t.category }}</span>
+          {{ status_chip(t.status) }}
+        </div>
+        <h1 class="text-[22px] font-bold text-ink tracking-tight">{{ t.title }}</h1>
+        <div class="text-[12.5px] text-ink-muted mt-1">
+          Opened {{ t.opened_at | datetime_str }} by {{ t.opened_by_email or 'system' }}
+          {% if t.zone_name %} · site <a href="{{ base_path }}/zones/{{ t.zone_id }}" class="hover:text-brand">{{ t.zone_name }}</a>{% endif %}
+          {% if t.incident_id %} · linked incident <a href="{{ base_path }}/incidents" class="hover:text-brand">#{{ t.incident_id }}</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLA panel -->
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Response SLA</div>
+        {{ sla_pill(t.sla.response_state) }}
+      </div>
+      <div class="text-[13.5px] text-ink">
+        Target <span class="font-semibold tabular">{{ secs_to_human(t.sla_response_secs) }}</span>
+        {% if t.response_at %}
+          · responded in <span class="font-semibold tabular text-{{ 'ok' if t.sla.response_state == 'met' else 'danger' }}">{{ secs_to_human(t.sla.response_elapsed_s) }}</span>
+        {% else %}
+          · elapsed <span class="font-semibold tabular text-{{ 'danger' if t.sla.response_state == 'breached' else 'ink' }}">{{ secs_to_human(t.sla.response_elapsed_s) }}</span>
+        {% endif %}
+      </div>
+      <div class="text-[11.5px] text-ink-muted mt-1">Breach point: {{ t.sla.response_breach_at | datetime_str }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="flex items-center justify-between mb-2">
+        <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Resolution SLA</div>
+        {{ sla_pill(t.sla.resolution_state) }}
+      </div>
+      <div class="text-[13.5px] text-ink">
+        Target <span class="font-semibold tabular">{{ secs_to_human(t.sla_resolution_secs) }}</span>
+        {% if t.resolved_at %}
+          · resolved in <span class="font-semibold tabular text-{{ 'ok' if t.sla.resolution_state == 'met' else 'danger' }}">{{ secs_to_human(t.sla.resolution_elapsed_s) }}</span>
+        {% else %}
+          · elapsed <span class="font-semibold tabular text-{{ 'danger' if t.sla.resolution_state == 'breached' else 'ink' }}">{{ secs_to_human(t.sla.resolution_elapsed_s) }}</span>
+        {% endif %}
+      </div>
+      <div class="text-[11.5px] text-ink-muted mt-1">Breach point: {{ t.sla.resolution_breach_at | datetime_str }}</div>
+    </div>
+  </div>
+
+  <!-- Description -->
+  {% if t.description %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[13px] font-semibold text-ink uppercase tracking-wider">Description</h2></div>
+    <div class="px-5 py-4 text-[13.5px] text-ink whitespace-pre-line">{{ t.description }}</div>
+  </div>
+  {% endif %}
+
+  <!-- Actions -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[13px] font-semibold text-ink uppercase tracking-wider">Actions</h2></div>
+    <div class="p-5 space-y-4">
+      {% if t.status in ['open', 'in_progress'] and not t.response_at %}
+      <form method="post" action="{{ base_path }}/tickets/{{ t.id }}/respond" class="flex flex-col gap-2">
+        <label class="text-[12px] font-semibold text-ink uppercase tracking-wider">Mark first response</label>
+        <textarea name="note" rows="2" placeholder="Optional note about initial triage" class="w-full px-3 py-2 border border-line rounded-md text-[13px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+        <button class="self-start h-9 px-4 bg-info hover:bg-info-dark text-white font-semibold text-[12.5px] rounded-md">Acknowledge / respond</button>
+      </form>
+      {% endif %}
+
+      {% if t.status in ['open', 'in_progress'] %}
+      <form method="post" action="{{ base_path }}/tickets/{{ t.id }}/resolve" class="flex flex-col gap-2 {% if not t.response_at %}pt-4 border-t border-line{% endif %}">
+        <label class="text-[12px] font-semibold text-ink uppercase tracking-wider">Mark resolved</label>
+        <textarea name="resolution_notes" rows="2" placeholder="Resolution summary (what fixed it)" class="w-full px-3 py-2 border border-line rounded-md text-[13px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+        {% if t.priority in ['p1', 'p2'] %}
+        <textarea name="rca_text" rows="3" placeholder="Root Cause Analysis (required by SLA for P1/P2 incidents)" class="w-full px-3 py-2 border border-line rounded-md text-[13px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+        {% endif %}
+        <button class="self-start h-9 px-4 bg-ok hover:bg-ok-dark text-white font-semibold text-[12.5px] rounded-md">Resolve</button>
+      </form>
+      {% elif t.status == 'resolved' %}
+      <div class="flex items-center gap-3 pt-2">
+        <form method="post" action="{{ base_path }}/tickets/{{ t.id }}/close">
+          <button class="h-9 px-4 bg-ink hover:bg-ink-muted text-white font-semibold text-[12.5px] rounded-md">Close ticket</button>
+        </form>
+        <form method="post" action="{{ base_path }}/tickets/{{ t.id }}/reopen" class="flex items-center gap-2">
+          <input name="reason" placeholder="Reason for reopening" class="w-72 px-3 h-9 border border-line rounded-md text-[12.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <button class="h-9 px-3 bg-white border border-line text-ink-muted hover:text-ink hover:border-ink font-semibold text-[12px] rounded-md">Reopen</button>
+        </form>
+      </div>
+      {% endif %}
+
+      {% if t.resolution_notes %}
+      <div class="border-t border-line pt-3">
+        <div class="text-[11px] uppercase tracking-wider text-ink-muted font-semibold mb-1">Resolution</div>
+        <div class="text-[13px] text-ink whitespace-pre-line">{{ t.resolution_notes }}</div>
+      </div>
+      {% endif %}
+      {% if t.rca_text %}
+      <div class="border-t border-line pt-3">
+        <div class="text-[11px] uppercase tracking-wider text-ink-muted font-semibold mb-1">Root Cause Analysis</div>
+        <div class="text-[13px] text-ink whitespace-pre-line">{{ t.rca_text }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Activity timeline -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-5 py-3 border-b border-line"><h2 class="text-[13px] font-semibold text-ink uppercase tracking-wider">Activity</h2></div>
+    <div class="p-5">
+      <ol class="space-y-3">
+        {% for e in events %}
+        <li class="flex gap-3 text-[13px]">
+          <span class="w-2 h-2 rounded-full bg-brand mt-2 shrink-0"></span>
+          <div class="flex-1">
+            <span class="font-semibold text-ink">{{ e.event_type }}</span>
+            <span class="text-ink-muted"> · {{ e.ts | datetime_str }}</span>
+            {% if e.user_email %}<span class="text-ink-muted"> · {{ e.user_email }}</span>{% endif %}
+            {% if e.details_json %}
+            <pre class="mt-1 text-[11.5px] text-ink-muted font-mono whitespace-pre-wrap bg-surface-alt rounded px-2 py-1.5">{{ e.details_json | tojson(indent=2) }}</pre>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+
+      <form method="post" action="{{ base_path }}/tickets/{{ t.id }}/comment" class="mt-5 border-t border-line pt-4 flex flex-col gap-2">
+        <label class="text-[12px] font-semibold text-ink uppercase tracking-wider">Add a comment</label>
+        <textarea name="body" rows="2" required placeholder="Internal note for the activity log" class="w-full px-3 py-2 border border-line rounded-md text-[13px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+        <button class="self-start h-8 px-3 bg-ink hover:bg-ink-muted text-white font-semibold text-[12px] rounded-md">Post comment</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

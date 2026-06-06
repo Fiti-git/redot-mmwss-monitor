@@ -1,0 +1,75 @@
+{% extends "_app_shell.html" %}
+{% block title %}New ticket — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="max-w-[760px]">
+  <div class="mb-6">
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/tickets" class="hover:text-brand">Tickets</a> / New
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">New ticket</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">Open an operational item with an SLA target. Manual tickets are used for change requests, ad-hoc support, and items not auto-detected by monitoring.</p>
+  </div>
+
+  <form method="post" action="{{ base_path }}/tickets/new" class="bg-white border border-line rounded-xl2 shadow-card p-6 space-y-5">
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Title</label>
+      <input name="title" type="text" required maxlength="200"
+             placeholder="Short, scannable summary"
+             class="w-full h-11 px-3.5 bg-white border border-line rounded-lg text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand">
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Priority</label>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        {% for p in ['p1', 'p2', 'p3', 'p4'] %}
+        <label class="flex items-start gap-3 px-4 py-3 bg-surface-alt border border-line rounded-lg cursor-pointer hover:bg-white hover:border-brand-300 has-[:checked]:border-brand has-[:checked]:bg-brand-50">
+          <input type="radio" name="priority" value="{{ p }}" required class="mt-0.5">
+          <div>
+            <div class="text-[13px] font-bold text-ink">{{ sla_labels[p] }}</div>
+            <div class="text-[11.5px] text-ink-muted">{{ sla_examples[p] }}</div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Category</label>
+        <select name="category" class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <option value="other">Other</option>
+          <option value="uptime">Uptime</option>
+          <option value="payment">Payment gateway</option>
+          <option value="security">Security</option>
+          <option value="cms">CMS / plugin</option>
+          <option value="performance">Performance</option>
+          <option value="vapt">VAPT remediation</option>
+          <option value="config_change">Config change</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Site (optional)</label>
+        <select name="zone_id" class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <option value="">— No site / cross-cutting —</option>
+          {% for z in zones %}
+          <option value="{{ z.id }}">{{ z.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Description</label>
+      <textarea name="description" rows="5"
+                placeholder="What's the situation? Reproduction steps, impact, links, etc."
+                class="w-full px-3.5 py-2.5 bg-white border border-line rounded-lg text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2 border-t border-line">
+      <a href="{{ base_path }}/tickets" class="h-10 px-4 inline-flex items-center text-[13px] font-semibold text-ink-muted hover:text-ink">Cancel</a>
+      <button type="submit" class="h-10 px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[13px] rounded-md shadow-card">Create ticket</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

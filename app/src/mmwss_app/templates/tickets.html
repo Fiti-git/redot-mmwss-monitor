@@ -1,0 +1,127 @@
+{% extends "_app_shell.html" %}
+{% block title %}Tickets — MMWSS{% endblock %}
+
+{% macro priority_chip(p) %}
+{% set cls = {'p1': 'bg-danger-soft text-danger-dark', 'p2': 'bg-warn-soft text-warn-dark',
+              'p3': 'bg-info-soft text-info-dark', 'p4': 'bg-surface-sunken text-ink-muted'}[p] %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ p }}</span>
+{% endmacro %}
+
+{% macro status_chip(s) %}
+{% if s == 'open' %}<span class="inline-flex items-center gap-1 text-[11px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger"></span>open</span>
+{% elif s == 'in_progress' %}<span class="inline-flex items-center gap-1 text-[11px] text-warn-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-warn"></span>in progress</span>
+{% elif s == 'resolved' %}<span class="inline-flex items-center gap-1 text-[11px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>resolved</span>
+{% else %}<span class="inline-flex items-center gap-1 text-[11px] text-ink-muted"><span class="w-1.5 h-1.5 rounded-full bg-ink-subtle"></span>closed</span>{% endif %}
+{% endmacro %}
+
+{% macro sla_pill(state) %}
+{% if state == 'met' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-ok-soft text-ok-dark">met</span>
+{% elif state == 'breached' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">breached</span>
+{% else %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">pending</span>{% endif %}
+{% endmacro %}
+
+{% macro elapsed(s) %}
+{% if s < 60 %}{{ s }}s
+{% elif s < 3600 %}{{ s // 60 }}m
+{% elif s < 86400 %}{{ s // 3600 }}h {{ (s % 3600) // 60 }}m
+{% else %}{{ s // 86400 }}d {{ (s % 86400) // 3600 }}h{% endif %}
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1400px]">
+  <!-- Header -->
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">Tickets</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">Operational queue with SLA tracking — every incident, change, VAPT finding, and support request.</p>
+    </div>
+    <a href="{{ base_path }}/tickets/new"
+       class="inline-flex items-center gap-1.5 h-10 px-4 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[13px] rounded-lg shadow-card">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New ticket
+    </a>
+  </div>
+
+  <!-- Queue counter strip -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Open total</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.open_total > 0 else 'ink' }}">{{ counters.open_total }}</div>
+    </div>
+    {% for p in ['p1', 'p2', 'p3', 'p4'] %}
+    {% set cls = {'p1': 'danger', 'p2': 'warn', 'p3': 'info', 'p4': 'ink'}[p] %}
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">{{ p | upper }} open</div>
+        {{ priority_chip(p) }}
+      </div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ cls if counters.by_priority[p] > 0 else 'ink' }}">{{ counters.by_priority[p] }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Filter pills -->
+  <div class="flex items-center gap-2 flex-wrap text-[12.5px]">
+    <span class="text-ink-muted font-medium">Filter:</span>
+    <a href="{{ base_path }}/tickets" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_status and not filter_priority else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    <a href="{{ base_path }}/tickets?status=open" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_status == 'open' else 'bg-white border border-line text-ink-muted hover:text-ink' }}">Open</a>
+    <a href="{{ base_path }}/tickets?status=in_progress" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_status == 'in_progress' else 'bg-white border border-line text-ink-muted hover:text-ink' }}">In&nbsp;progress</a>
+    <a href="{{ base_path }}/tickets?status=resolved" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_status == 'resolved' else 'bg-white border border-line text-ink-muted hover:text-ink' }}">Resolved</a>
+    <span class="mx-2 text-ink-subtle">·</span>
+    {% for p in ['p1', 'p2', 'p3', 'p4'] %}
+    <a href="{{ base_path }}/tickets?priority={{ p }}" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_priority == p else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ p | upper }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- List -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Priority</th>
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Category</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-left px-5 py-3">Response SLA</th>
+          <th class="text-left px-5 py-3">Resolution SLA</th>
+          <th class="text-left px-5 py-3">Opened</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tickets %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted tabular">#{{ t.id }}</td>
+          <td class="px-5 py-3">{{ priority_chip(t.priority) }}</td>
+          <td class="px-5 py-3 text-[13.5px]">
+            <a href="{{ base_path }}/tickets/{{ t.id }}" class="text-ink font-semibold hover:text-brand">{{ t.title }}</a>
+            {% if t.incident_id %}<span class="ml-1 text-[10px] text-ink-subtle">from incident #{{ t.incident_id }}</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ t.zone_name or '—' }}</td>
+          <td class="px-5 py-3 text-[12.5px] font-mono text-ink-muted">{{ t.category }}</td>
+          <td class="px-5 py-3">{{ status_chip(t.status) }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {{ sla_pill(t.sla.response_state) }}
+            <span class="ml-1 text-ink-muted tabular">{{ elapsed(t.sla.response_elapsed_s) }}</span>
+          </td>
+          <td class="px-5 py-3 text-[12px]">
+            {{ sla_pill(t.sla.resolution_state) }}
+            <span class="ml-1 text-ink-muted tabular">{{ elapsed(t.sla.resolution_elapsed_s) }}</span>
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ t.opened_at | datetime_str }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">Queue is empty</div>
+            <div>No tickets match this filter. Open a new one to start tracking.</div>
+            <a href="{{ base_path }}/tickets/new" class="mt-2 text-brand font-semibold">+ New ticket</a>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

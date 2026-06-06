@@ -73,7 +73,26 @@ def probe_uptime(settings: Settings, conn) -> int:
                     (zid, summary, json.dumps(details)),
                 )
                 new_id = cur.fetchone()["id"]
-                log.warning("Opened incident #%d: %s down", new_id, z["name"])
+                # Auto-create a P1 ticket linked to this incident (uptime = SLA P1)
+                cur.execute(
+                    """
+                    INSERT INTO mmwss.tickets
+                        (title, description, priority, category, source, zone_id, incident_id,
+                         sla_response_secs, sla_resolution_secs)
+                    VALUES (%s, %s, 'p1', 'uptime', 'auto_incident', %s, %s, 7200, 28800)
+                    RETURNING id
+                    """,
+                    (f"[P1] {z['name']} down", summary, zid, new_id),
+                )
+                new_ticket_id = cur.fetchone()["id"]
+                cur.execute(
+                    """
+                    INSERT INTO mmwss.ticket_events (ticket_id, event_type, details_json)
+                    VALUES (%s, 'created', %s::jsonb)
+                    """,
+                    (new_ticket_id, json.dumps({"source": "auto_incident", "incident_id": new_id})),
+                )
+                log.warning("Opened incident #%d + ticket #%d: %s down", new_id, new_ticket_id, z["name"])
                 conn.commit()
                 alerts.notify_incident_opened(
                     settings, conn,
@@ -85,6 +104,27 @@ def probe_uptime(settings: Settings, conn) -> int:
                     "UPDATE mmwss.incidents SET ended_at = now() WHERE id = %s",
                     (open_incident["id"],),
                 )
+                # Auto-resolve the linked ticket too (if any)
+                cur.execute(
+                    """
+                    UPDATE mmwss.tickets
+                    SET status = 'resolved',
+                        resolved_at = COALESCE(resolved_at, now()),
+                        response_at = COALESCE(response_at, opened_at),
+                        resolution_notes = COALESCE(resolution_notes,
+                          'Auto-resolved: site recovered (2 consecutive successful probes).')
+                    WHERE incident_id = %s AND status IN ('open', 'in_progress')
+                    RETURNING id
+                    """,
+                    (open_incident["id"],),
+                )
+                resolved_ticket = cur.fetchone()
+                if resolved_ticket:
+                    cur.execute(
+                        "INSERT INTO mmwss.ticket_events (ticket_id, event_type, details_json) "
+                        "VALUES (%s, 'resolved', %s::jsonb)",
+                        (resolved_ticket["id"], json.dumps({"source": "auto_incident_recovery"})),
+                    )
                 conn.commit()
                 log.info("Closed incident #%d: %s recovered", open_incident["id"], z["name"])
                 alerts.notify_incident_resolved(
