@@ -85,6 +85,7 @@ def _env() -> Environment:
     env = Environment(loader=FileSystemLoader(str(TEMPLATE_DIR)), autoescape=select_autoescape(["html"]))
     env.filters["format_int"] = _fmt_int
     env.filters["human_bytes"] = _human_bytes
+    env.filters["secs_to_human"] = _secs_to_human
     return env
 
 
@@ -324,6 +325,190 @@ def _recommend(sites: list[dict]) -> list[Recommendation]:
 # ───────── main entry point ─────────
 
 
+# ───────── SLA / tickets / change-log / VAPT (read from schemas added by
+#           migrations 005-007) ─────────
+
+
+def _sla_summary(conn, start, end) -> dict:
+    """SLA compliance per priority for the period.
+    Returns {p1: {target_response, target_resolution, total, response_met,
+                  response_breached, resolution_met, resolution_breached,
+                  still_open}, ...}
+    """
+    out = {}
+    targets = {
+        "p1": (2 * 3600,        8 * 3600),
+        "p2": (4 * 3600,       24 * 3600),
+        "p3": (1 * 24 * 3600,  3 * 24 * 3600),
+        "p4": (3 * 24 * 3600,  7 * 24 * 3600),
+    }
+    for p, (resp, resol) in targets.items():
+        out[p] = {
+            "target_response_secs": resp,
+            "target_resolution_secs": resol,
+            "total": 0, "response_met": 0, "response_breached": 0,
+            "resolution_met": 0, "resolution_breached": 0, "still_open": 0,
+        }
+    rows = _qn(
+        conn,
+        """
+        SELECT priority, sla_response_secs, sla_resolution_secs,
+               opened_at, response_at, resolved_at
+        FROM mmwss.tickets
+        WHERE opened_at >= %s AND opened_at < %s
+        """,
+        (start, end),
+    )
+    for r in rows:
+        p = r["priority"]
+        if p not in out:
+            continue
+        out[p]["total"] += 1
+        if r["response_at"]:
+            elapsed = (r["response_at"] - r["opened_at"]).total_seconds()
+            if elapsed <= r["sla_response_secs"]:
+                out[p]["response_met"] += 1
+            else:
+                out[p]["response_breached"] += 1
+        if r["resolved_at"]:
+            elapsed = (r["resolved_at"] - r["opened_at"]).total_seconds()
+            if elapsed <= r["sla_resolution_secs"]:
+                out[p]["resolution_met"] += 1
+            else:
+                out[p]["resolution_breached"] += 1
+        else:
+            out[p]["still_open"] += 1
+    return out
+
+
+def _change_log_in_period(conn, start, end) -> list[dict]:
+    return _qn(
+        conn,
+        """
+        SELECT c.id, c.category, c.title, c.before_state, c.after_state,
+               c.test_result, c.rolled_back, c.executed_at, c.source,
+               z.name AS zone_name, u.email AS engineer_email
+        FROM mmwss.change_log c
+        LEFT JOIN mmwss.zones z ON z.id = c.zone_id
+        LEFT JOIN mmwss.users u ON u.id = c.engineer_user_id
+        WHERE c.executed_at >= %s AND c.executed_at < %s
+        ORDER BY c.executed_at DESC
+        """,
+        (start, end),
+    )
+
+
+def _change_log_by_category(entries: list[dict]) -> dict[str, dict]:
+    """Group change-log rows by category for the summary block."""
+    label = {
+        "plugin_update": "Plugin updates", "core_update": "WordPress core",
+        "theme_update": "Theme updates", "cf_setting": "Cloudflare settings",
+        "cf_firewall_rule": "CF firewall rules", "cf_dns": "DNS changes",
+        "ssl_renewal": "SSL renewals", "server_config": "Server config",
+        "database_change": "Database changes", "custom_code": "Custom code",
+        "vapt_remediation": "VAPT remediations", "other": "Other",
+    }
+    out: dict[str, dict] = {}
+    for e in entries:
+        cat = e["category"]
+        bucket = out.setdefault(cat, {
+            "label": label.get(cat, cat), "count": 0,
+            "tested_pass": 0, "tested_fail": 0, "untested": 0, "rolled_back": 0,
+            "samples": [],
+        })
+        bucket["count"] += 1
+        if e["test_result"] == "passed":
+            bucket["tested_pass"] += 1
+        elif e["test_result"] == "failed":
+            bucket["tested_fail"] += 1
+        else:
+            bucket["untested"] += 1
+        if e["rolled_back"]:
+            bucket["rolled_back"] += 1
+        if len(bucket["samples"]) < 3:
+            bucket["samples"].append(e["title"])
+    # Stable ordering: critical maintenance categories first
+    order = ["plugin_update", "core_update", "theme_update",
+             "cf_setting", "cf_firewall_rule", "cf_dns", "ssl_renewal",
+             "server_config", "database_change", "custom_code",
+             "vapt_remediation", "other"]
+    return {k: out[k] for k in order if k in out}
+
+
+def _vapt_status_summary(conn, start, end) -> dict:
+    """Current VAPT posture + remediations completed in period."""
+    by_severity: dict[str, dict[str, int]] = {}
+    for sev in ("critical", "high", "medium", "low", "info"):
+        by_severity[sev] = {
+            "total": 0, "open": 0, "in_progress": 0, "remediated": 0,
+            "verified": 0, "accepted_risk": 0, "false_positive": 0,
+        }
+    rows = _qn(
+        conn,
+        "SELECT severity, status, COUNT(*)::int AS n FROM mmwss.vapt_findings GROUP BY severity, status",
+    )
+    for r in rows:
+        sev = r["severity"]
+        st = r["status"]
+        if sev in by_severity:
+            by_severity[sev]["total"] += r["n"]
+            if st in by_severity[sev]:
+                by_severity[sev][st] += r["n"]
+
+    in_period = _q1(
+        conn,
+        """
+        SELECT
+            COUNT(*) FILTER (WHERE remediated_at >= %s AND remediated_at < %s)::int AS remediated,
+            COUNT(*) FILTER (WHERE verified_at >= %s AND verified_at < %s)::int AS verified,
+            COUNT(*) FILTER (WHERE discovered_at >= %s AND discovered_at < %s)::int AS discovered
+        FROM mmwss.vapt_findings
+        """,
+        (start, end, start, end, start, end),
+    )
+    overall_total = sum(b["total"] for b in by_severity.values())
+    overall_closed = sum((b["remediated"] + b["verified"] + b["accepted_risk"] + b["false_positive"])
+                        for b in by_severity.values())
+    return {
+        "by_severity": by_severity,
+        "remediated_in_period": in_period["remediated"] if in_period else 0,
+        "verified_in_period": in_period["verified"] if in_period else 0,
+        "discovered_in_period": in_period["discovered"] if in_period else 0,
+        "overall_total": overall_total,
+        "overall_closed": overall_closed,
+        "completion_pct": (overall_closed / overall_total * 100) if overall_total else None,
+    }
+
+
+def _uptime_per_site(conn, start, end) -> list[dict]:
+    rows = _qn(
+        conn,
+        """
+        SELECT z.id, z.name,
+               COUNT(uc.id)::int AS total,
+               COUNT(uc.id) FILTER (WHERE uc.ok)::int AS ok,
+               AVG(uc.latency_ms) FILTER (WHERE uc.ok) AS avg_latency
+        FROM mmwss.zones z
+        LEFT JOIN mmwss.uptime_checks uc
+            ON uc.zone_id = z.id AND uc.checked_at >= %s AND uc.checked_at < %s
+        WHERE z.status = 'active'
+        GROUP BY z.id, z.name
+        ORDER BY z.name
+        """,
+        (start, end),
+    )
+    for r in rows:
+        r["pct"] = (r["ok"] / r["total"] * 100) if r["total"] else None
+    return rows
+
+
+def _secs_to_human(s: int) -> str:
+    if s < 60:   return f"{s}s"
+    if s < 3600: return f"{s // 60}m"
+    if s < 86400:return f"{s // 3600}h"
+    return f"{s // 86400}d"
+
+
 _WP_TITLES = {
     "wp_config_exposed":          "wp-config.php is publicly served",
     "env_exposed":                ".env file is publicly served",
@@ -383,6 +568,13 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
     recommendations = _recommend(sites)
     wp_findings = _wp_findings(conn)
 
+    # Contract-aligned sections (added in week 1 of maintenance build-out)
+    sla_summary    = _sla_summary(conn, start, end)
+    change_entries = _change_log_in_period(conn, start, end)
+    change_by_cat  = _change_log_by_category(change_entries)
+    vapt_summary   = _vapt_status_summary(conn, start, end)
+    uptime_sites   = _uptime_per_site(conn, start, end)
+
     # Bar-chart data: only sites with >0 threats, scaled to max=100
     max_threats = max((s["threats"] for s in sites), default=0)
     sites_with_threats = [
@@ -413,6 +605,13 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         "recommendations": [{"site": r.site, "severity": r.severity, "title": r.title, "body": r.body}
                             for r in recommendations],
         "wp_findings": wp_findings,
+        # Contract-aligned sections
+        "sla_summary":    sla_summary,
+        "uptime_sites":   uptime_sites,
+        "change_entries": change_entries,
+        "change_by_cat":  change_by_cat,
+        "vapt_summary":   vapt_summary,
+        "secs_to_human":  _secs_to_human,
     }
 
     tmpl = _env().get_template("report.html")

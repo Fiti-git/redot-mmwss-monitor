@@ -150,6 +150,81 @@
   </div>
 </section>
 
+<!-- ── SLA performance (proposal Section 5) ── -->
+<section class="avoid-break">
+  <h2>SLA performance</h2>
+  <p class="muted small" style="margin: -4px 0 8px 0;">Tickets opened during this period, measured against the contractual response/resolution targets per priority.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Priority</th>
+        <th class="right">Tickets</th>
+        <th>Target (resp / resol)</th>
+        <th class="right">Response met</th>
+        <th class="right">Resolution met</th>
+        <th class="right">Breached</th>
+        <th class="right">Open at period end</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for pkey in ['p1', 'p2', 'p3', 'p4'] %}
+      {% set p = sla_summary[pkey] %}
+      <tr>
+        <td><strong>{{ pkey | upper }}</strong></td>
+        <td class="right tabular">{{ p.total }}</td>
+        <td class="muted small tabular">{{ p.target_response_secs | secs_to_human }} / {{ p.target_resolution_secs | secs_to_human }}</td>
+        <td class="right tabular">
+          {% if p.total > 0 %}{{ p.response_met }} / {{ p.total }} ({{ '%.0f'|format(p.response_met / p.total * 100) }}%){% else %}—{% endif %}
+        </td>
+        <td class="right tabular">
+          {% if p.total > 0 %}{{ p.resolution_met }} / {{ p.total }} ({{ '%.0f'|format(p.resolution_met / p.total * 100) }}%){% else %}—{% endif %}
+        </td>
+        <td class="right tabular">
+          {% set breached = p.response_breached + p.resolution_breached %}
+          {% if breached > 0 %}<span style="color: #C0282E">{{ breached }}</span>{% else %}{{ breached }}{% endif %}
+        </td>
+        <td class="right tabular">{{ p.still_open }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Uptime per site (proposal 99.9% peak commitment) ── -->
+<section class="avoid-break">
+  <h2>Uptime &amp; availability</h2>
+  <p class="muted small" style="margin: -4px 0 8px 0;">Origin uptime probed every 60 seconds from Singapore. Target: 99.9% during peak operating periods.</p>
+  <table>
+    <thead>
+      <tr>
+        <th>Site</th>
+        <th class="right">Probes</th>
+        <th class="right">OK</th>
+        <th class="right">Uptime %</th>
+        <th class="right">Avg latency</th>
+        <th>vs SLA</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for u in uptime_sites %}
+      <tr>
+        <td><strong>{{ u.name }}</strong></td>
+        <td class="right tabular">{{ u.total | format_int }}</td>
+        <td class="right tabular">{{ u.ok | format_int }}</td>
+        <td class="right tabular">{% if u.pct is not none %}{{ '%.3f'|format(u.pct) }}%{% else %}—{% endif %}</td>
+        <td class="right tabular">{% if u.avg_latency %}{{ u.avg_latency | round | int }} ms{% else %}—{% endif %}</td>
+        <td>
+          {% if u.pct is none %}<span class="pill grey">no data</span>
+          {% elif u.pct >= 99.9 %}<span class="pill green">met</span>
+          {% elif u.pct >= 99.0 %}<span class="pill amber">below target</span>
+          {% else %}<span class="pill red">below target</span>{% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
 <section class="avoid-break">
   <h2>Site performance</h2>
   <table>
@@ -233,6 +308,110 @@
   </table>
   {% else %}
   <div class="summary-box">No incidents recorded during this period — every site stayed responsive and within configured thresholds.</div>
+  {% endif %}
+</section>
+
+<!-- ── Patch + change log summary (proposal Section 3.5) ── -->
+<section>
+  <h2>Patches &amp; system changes</h2>
+  <p class="muted small" style="margin: -4px 0 8px 0;">All system changes recorded this period — plugin updates, Cloudflare configuration, server configuration, VAPT remediations. Each entry includes engineer, before/after state, test result, and rollback status.</p>
+  {% if change_by_cat %}
+  <table>
+    <thead>
+      <tr>
+        <th>Category</th>
+        <th class="right">Count</th>
+        <th class="right">Tested pass</th>
+        <th class="right">Tested fail</th>
+        <th class="right">Untested</th>
+        <th class="right">Rolled back</th>
+        <th>Examples</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for cat_key, c in change_by_cat.items() %}
+      <tr>
+        <td><strong>{{ c.label }}</strong></td>
+        <td class="right tabular">{{ c.count }}</td>
+        <td class="right tabular">{{ c.tested_pass }}</td>
+        <td class="right tabular">{% if c.tested_fail > 0 %}<span style="color:#C0282E">{{ c.tested_fail }}</span>{% else %}{{ c.tested_fail }}{% endif %}</td>
+        <td class="right tabular">{% if c.untested > 0 %}<span class="muted">{{ c.untested }}</span>{% else %}{{ c.untested }}{% endif %}</td>
+        <td class="right tabular">{% if c.rolled_back > 0 %}<span style="color:#C0282E">{{ c.rolled_back }}</span>{% else %}{{ c.rolled_back }}{% endif %}</td>
+        <td class="muted small">{% for s in c.samples %}{{ s }}{% if not loop.last %}; {% endif %}{% endfor %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted small" style="margin-top: 8px;">Total entries this period: <strong>{{ change_entries | length }}</strong>. Full change log available in MMWSS dashboard for audit.</p>
+  {% else %}
+  <div class="summary-box">No system changes recorded this period. (For monthly reports this is unusual — plugin/CMS maintenance typically generates entries each cycle.)</div>
+  {% endif %}
+</section>
+
+<!-- ── VAPT remediation status (proposal Section 2.2.1) ── -->
+<section>
+  <h2>VAPT remediation status</h2>
+  <p class="muted small" style="margin: -4px 0 8px 0;">Standing VAPT findings across all loaded reports, with status counts per severity. Remediation SLA: critical within 8h, high within 14 days.</p>
+  {% if vapt_summary.overall_total > 0 %}
+  <div class="kpis">
+    <div class="kpi">
+      <div class="label">Total findings</div>
+      <div class="value tabular">{{ vapt_summary.overall_total }}</div>
+      <div class="sub">across all loaded VAPT reports</div>
+    </div>
+    <div class="kpi accent-green">
+      <div class="label">Closed</div>
+      <div class="value tabular">{{ vapt_summary.overall_closed }}</div>
+      <div class="sub">{% if vapt_summary.completion_pct is not none %}{{ '%.0f'|format(vapt_summary.completion_pct) }}% completion{% endif %}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">Remediated (period)</div>
+      <div class="value tabular">{{ vapt_summary.remediated_in_period }}</div>
+      <div class="sub">verified: {{ vapt_summary.verified_in_period }}</div>
+    </div>
+    <div class="kpi">
+      <div class="label">New findings (period)</div>
+      <div class="value tabular">{{ vapt_summary.discovered_in_period }}</div>
+      <div class="sub">freshly logged</div>
+    </div>
+  </div>
+
+  <table style="margin-top: 8px;">
+    <thead>
+      <tr>
+        <th>Severity</th>
+        <th class="right">Total</th>
+        <th class="right">Open</th>
+        <th class="right">In progress</th>
+        <th class="right">Remediated</th>
+        <th class="right">Verified</th>
+        <th class="right">Accepted / FP</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for sev in ['critical', 'high', 'medium', 'low', 'info'] %}
+      {% set v = vapt_summary.by_severity[sev] %}
+      {% if v.total > 0 %}
+      <tr>
+        <td>
+          {% if sev == 'critical' %}<span class="pill red">{{ sev }}</span>
+          {% elif sev == 'high' %}<span class="pill amber">{{ sev }}</span>
+          {% elif sev == 'medium' %}<span class="pill blue">{{ sev }}</span>
+          {% else %}<span class="pill grey">{{ sev }}</span>{% endif %}
+        </td>
+        <td class="right tabular">{{ v.total }}</td>
+        <td class="right tabular">{% if v.open > 0 and sev in ['critical','high'] %}<span style="color:#C0282E">{{ v.open }}</span>{% else %}{{ v.open }}{% endif %}</td>
+        <td class="right tabular">{{ v.in_progress }}</td>
+        <td class="right tabular">{{ v.remediated }}</td>
+        <td class="right tabular">{{ v.verified }}</td>
+        <td class="right tabular muted">{{ v.accepted_risk + v.false_positive }}</td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="summary-box">No VAPT reports loaded yet. The next assessment is scheduled for Q3 2026; this section will populate once findings are logged.</div>
   {% endif %}
 </section>
 
