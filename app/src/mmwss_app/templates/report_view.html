@@ -121,6 +121,14 @@
     #book-wrapper {
       position: relative;
       will-change: transform;
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+      transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+                  transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    #book-wrapper.ready {
+      opacity: 1;
+      transform: translateY(0) scale(1);
     }
 
     /* The book casts a soft floor shadow that scales with size */
@@ -136,7 +144,7 @@
       pointer-events: none;
     }
 
-    /* Each page = subtle paper texture, vignette, fine grain */
+    /* Each page = subtle paper texture, vignette, fine grain, rounded corners */
     .page {
       background: var(--paper);
       background-image:
@@ -144,11 +152,16 @@
         repeating-linear-gradient(0deg, transparent 0px, transparent 3px, rgba(0,0,0,0.012) 3px, rgba(0,0,0,0.012) 4px);
       color: var(--ink);
       border: 1px solid var(--paper-edge);
+      border-radius: 10px;          /* soft book-quality corner */
       box-shadow:
         inset 0 0 60px rgba(150, 130, 90, 0.05),
-        0 1px 0 #fff;
+        0 1px 0 rgba(255,255,255,0.4);
       overflow: hidden;
       position: relative;
+      will-change: transform;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      transform: translateZ(0);     /* promote to its own layer for smoother flip */
     }
     .page img {
       width: 100%;
@@ -156,14 +169,24 @@
       object-fit: contain;
       display: block;
       filter: contrast(1.02) saturate(0.97);
+      image-rendering: -webkit-optimize-contrast;
+      image-rendering: crisp-edges;
+      border-radius: inherit;
     }
+
+    /* StPageFlip internal wrappers — round them too so the curl renders cleanly */
+    .stf__item, .stf__block { border-radius: 10px; overflow: hidden; }
+    .stf__parent { will-change: transform; }
 
     /* The cover (page 0) gets brand styling so it feels like a book jacket */
     .page.cover {
       background: linear-gradient(135deg, var(--leather) 0%, #1a120c 100%);
       color: #fbf8f1;
       border: 1px solid #5a3f2a;
-      box-shadow: inset 0 0 80px rgba(0,0,0,0.5);
+      border-radius: 12px;
+      box-shadow:
+        inset 0 0 80px rgba(0,0,0,0.5),
+        inset 0 0 2px rgba(255,200,150,0.15);
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -372,8 +395,8 @@
         src.connect(bp); bp.connect(gain); gain.connect(audioCtx.destination);
         src.start(now + t0); src.stop(now + t0 + dur);
       };
-      make(0,    0.07, 0.25, 1800, 4500);   // initial paper snap
-      make(0.04, 0.18, 0.12,  600, 2400);   // softer rustle tail
+      make(0,    0.06, 0.18, 1600, 3800);   // softer initial paper snap
+      make(0.05, 0.28, 0.09,  500, 2000);   // gentle rustle tail
     }
 
     // ───── Render PDF → image data URLs sized for the book ─────
@@ -489,13 +512,17 @@
         size: "fixed",
         minWidth: 280,
         minHeight: 400,
-        maxShadowOpacity: 0.55,
+        maxShadowOpacity: 0.45,         // softer, less harsh shadow during flip
         showCover: true,
         usePortrait: window.innerWidth < 900,
         mobileScrollSupport: false,
         drawShadow: true,
-        flippingTime: 800,
+        flippingTime: 1200,             // longer = silkier transition
         useMouseEvents: true,
+        swipeDistance: 18,              // smaller threshold = more responsive drag
+        clickEventForward: false,
+        showPageCorners: true,          // visible curl-on-hover hint
+        disableFlipByClick: false,
       });
       flip.loadFromHTML(document.querySelectorAll("#book .page"));
 
@@ -505,9 +532,12 @@
         playFlip();
       });
 
-      // Hide loader
+      // Reveal book first, then fade loader
       requestAnimationFrame(() => {
-        document.getElementById("loader").classList.add("hide");
+        document.getElementById("book-wrapper").classList.add("ready");
+        setTimeout(() => {
+          document.getElementById("loader").classList.add("hide");
+        }, 250);
       });
     }
 
