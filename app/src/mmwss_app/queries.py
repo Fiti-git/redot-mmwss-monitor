@@ -501,6 +501,117 @@ def aggregate_security_score() -> dict:
     }
 
 
+def analytics_daily(days: int = 30) -> list[dict]:
+    """Aggregate analytics by UTC day across all zones, last N days."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return db.fetch_all(
+        """
+        SELECT date_trunc('day', hour) AS day,
+               COALESCE(SUM(requests), 0)::bigint        AS requests,
+               COALESCE(SUM(cached_requests), 0)::bigint AS cached,
+               COALESCE(SUM(bytes), 0)::bigint           AS bytes,
+               COALESCE(SUM(threats), 0)::bigint         AS threats
+        FROM mmwss.analytics_hourly
+        WHERE hour >= %s
+        GROUP BY day
+        ORDER BY day
+        """,
+        (since,),
+    )
+
+
+def uptime_daily(days: int = 30) -> list[dict]:
+    """Per-zone, per-day uptime %."""
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return db.fetch_all(
+        """
+        SELECT date_trunc('day', uc.checked_at) AS day,
+               z.id AS zone_id, z.name AS zone_name,
+               COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE ok)::int AS ok
+        FROM mmwss.uptime_checks uc
+        JOIN mmwss.zones z ON z.id = uc.zone_id
+        WHERE uc.checked_at >= %s
+        GROUP BY day, z.id, z.name
+        ORDER BY day, z.name
+        """,
+        (since,),
+    )
+
+
+def top_sites_by_threats(days: int = 30, limit: int = 6) -> list[dict]:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return db.fetch_all(
+        """
+        SELECT z.id, z.name, COALESCE(SUM(a.threats), 0)::bigint AS threats
+        FROM mmwss.zones z
+        LEFT JOIN mmwss.analytics_hourly a
+            ON a.zone_id = z.id AND a.hour >= %s
+        WHERE z.status = 'active'
+        GROUP BY z.id, z.name
+        ORDER BY threats DESC NULLS LAST
+        LIMIT %s
+        """,
+        (since, limit),
+    )
+
+
+def top_sites_by_traffic(days: int = 30, limit: int = 6) -> list[dict]:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    return db.fetch_all(
+        """
+        SELECT z.id, z.name,
+               COALESCE(SUM(a.requests), 0)::bigint AS requests,
+               COALESCE(SUM(a.bytes), 0)::bigint    AS bytes
+        FROM mmwss.zones z
+        LEFT JOIN mmwss.analytics_hourly a
+            ON a.zone_id = z.id AND a.hour >= %s
+        WHERE z.status = 'active'
+        GROUP BY z.id, z.name
+        ORDER BY requests DESC NULLS LAST
+        LIMIT %s
+        """,
+        (since, limit),
+    )
+
+
+def period_totals(days: int = 30) -> dict:
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    a = db.fetch_one(
+        """
+        SELECT COALESCE(SUM(requests), 0)::bigint        AS requests,
+               COALESCE(SUM(cached_requests), 0)::bigint AS cached,
+               COALESCE(SUM(bytes), 0)::bigint           AS bytes,
+               COALESCE(SUM(threats), 0)::bigint         AS threats
+        FROM mmwss.analytics_hourly
+        WHERE hour >= %s
+        """,
+        (since,),
+    )
+    u = db.fetch_one(
+        """
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE ok)::int AS ok
+        FROM mmwss.uptime_checks WHERE checked_at >= %s
+        """,
+        (since,),
+    )
+    requests = int(a["requests"])
+    cached = int(a["cached"])
+    return {
+        "requests": requests,
+        "cached":   cached,
+        "bytes":    int(a["bytes"]),
+        "threats":  int(a["threats"]),
+        "hit_ratio": (cached / requests * 100) if requests else 0.0,
+        "uptime_pct": (u["ok"] / u["total"] * 100) if u["total"] else None,
+        "incidents": db.fetch_one(
+            "SELECT COUNT(*)::int AS n FROM mmwss.incidents WHERE started_at >= %s",
+            (since,),
+        )["n"],
+    }
+
+
 def list_reports(limit: int = 50) -> list[dict]:
     return db.fetch_all(
         """

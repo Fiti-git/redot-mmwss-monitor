@@ -83,6 +83,44 @@ def incidents(request: Request, user: dict = Depends(auth.require_user)):
     )
 
 
+@router.get("/trends", response_class=HTMLResponse)
+def trends_page(request: Request, user: dict = Depends(auth.require_user),
+                days: int = 30):
+    if days not in (7, 30, 90):
+        days = 30
+    totals = queries.period_totals(days)
+    daily = queries.analytics_daily(days)
+    uptime_d = queries.uptime_daily(days)
+    top_threats = queries.top_sites_by_threats(days)
+    top_traffic = queries.top_sites_by_traffic(days)
+
+    # Group daily uptime: {zone_name: [{day, pct}, ...]}
+    per_zone: dict[str, list[dict]] = {}
+    for r in uptime_d:
+        if r["total"]:
+            per_zone.setdefault(r["zone_name"], []).append({
+                "day": r["day"].isoformat(),
+                "pct": (r["ok"] / r["total"] * 100),
+            })
+
+    return templates.TemplateResponse(
+        "trends.html",
+        {
+            "request": request, "user": user, "active": "trends",
+            "days": days, "totals": totals,
+            "daily": [{"day": r["day"].isoformat(),
+                       "requests": int(r["requests"]),
+                       "cached": int(r["cached"]),
+                       "bytes": int(r["bytes"]),
+                       "threats": int(r["threats"])} for r in daily],
+            "uptime_per_zone": per_zone,
+            "top_threats": [{"name": r["name"], "threats": int(r["threats"])} for r in top_threats],
+            "top_traffic": [{"name": r["name"], "requests": int(r["requests"]),
+                              "bytes": int(r["bytes"])} for r in top_traffic],
+        },
+    )
+
+
 @router.get("/uptime", response_class=HTMLResponse)
 def uptime_page(request: Request, user: dict = Depends(auth.require_user)):
     summaries = queries.uptime_summary_all()

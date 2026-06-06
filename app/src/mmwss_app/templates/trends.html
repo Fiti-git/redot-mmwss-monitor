@@ -1,0 +1,233 @@
+{% extends "_app_shell.html" %}
+{% block title %}Trends — MMWSS{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block app_main %}
+<div class="space-y-6 max-w-[1400px]">
+  <!-- Header + range selector -->
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">Trends</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">Traffic, threats, uptime and cache behaviour over time — across all monitored sites.</p>
+    </div>
+    <div class="inline-flex bg-white border border-line rounded-lg shadow-card p-0.5">
+      {% for d in [7, 30, 90] %}
+      <a href="{{ base_path }}/trends?days={{ d }}"
+         class="px-3 h-8 inline-flex items-center text-[12.5px] font-semibold rounded-md transition-colors
+                {{ 'bg-brand text-white' if days == d else 'text-ink-muted hover:text-ink hover:bg-surface-alt' }}">
+        Last {{ d }} days
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- KPI strip for selected range -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Requests ({{ days }}d)</div>
+      <div class="text-[26px] font-bold mt-2 tabular text-ink tracking-tight">{{ totals.requests | fmt_int }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ totals.bytes | human_bytes }} served</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Cache hit ratio</div>
+      <div class="text-[26px] font-bold mt-2 tabular text-ok tracking-tight">{{ totals.hit_ratio | fmt_pct(1) }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ totals.cached | fmt_int }} served from cache</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Threats blocked</div>
+      <div class="text-[26px] font-bold mt-2 tabular {{ 'text-danger' if totals.threats > 0 else 'text-ink' }} tracking-tight">{{ totals.threats | fmt_int }}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">{{ totals.incidents }} incident{{ '' if totals.incidents == 1 else 's' }} in period</div>
+    </div>
+    {% set utc = 'ok' if totals.uptime_pct and totals.uptime_pct >= 99.9 else ('warn' if totals.uptime_pct and totals.uptime_pct >= 99 else ('danger' if totals.uptime_pct else 'ink')) %}
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Aggregate uptime</div>
+      <div class="text-[26px] font-bold mt-2 tabular text-{{ utc }} tracking-tight">{% if totals.uptime_pct is not none %}{{ totals.uptime_pct | fmt_pct(2) }}{% else %}—{% endif %}</div>
+      <div class="text-[12px] text-ink-muted mt-0.5">across all sites</div>
+    </div>
+  </div>
+
+  <!-- Traffic + threats over time -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+    <div class="bg-white border border-line rounded-xl2 shadow-card">
+      <div class="px-6 py-4 border-b border-line">
+        <h2 class="text-[15px] font-semibold text-ink">Daily traffic</h2>
+        <p class="text-[12px] text-ink-muted mt-0.5">Requests (dark) and cached share (green) — stacked daily totals.</p>
+      </div>
+      <div class="p-5">
+        {% if daily %}
+        <canvas id="trafficChart" height="120"></canvas>
+        {% else %}
+        <div class="text-center py-12 text-ink-muted text-[13px]">No traffic data yet for this range.</div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 shadow-card">
+      <div class="px-6 py-4 border-b border-line">
+        <h2 class="text-[15px] font-semibold text-ink">Threats blocked</h2>
+        <p class="text-[12px] text-ink-muted mt-0.5">Daily count across all monitored sites.</p>
+      </div>
+      <div class="p-5">
+        {% if daily %}
+        <canvas id="threatsChart" height="120"></canvas>
+        {% else %}
+        <div class="text-center py-12 text-ink-muted text-[13px]">No threat data yet for this range.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Uptime per site -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-6 py-4 border-b border-line">
+      <h2 class="text-[15px] font-semibold text-ink">Uptime by site</h2>
+      <p class="text-[12px] text-ink-muted mt-0.5">Daily uptime % per zone — anything below 99.9% (the dashed reference line) is worth investigating.</p>
+    </div>
+    <div class="p-5">
+      {% if uptime_per_zone %}
+      <canvas id="uptimeChart" height="80"></canvas>
+      {% else %}
+      <div class="text-center py-12 text-ink-muted text-[13px]">No uptime data yet for this range.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Top sites -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+    <div class="bg-white border border-line rounded-xl2 shadow-card">
+      <div class="px-6 py-4 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Top sites by threats ({{ days }}d)</h2></div>
+      <div class="p-5">
+        {% set max_th = (top_threats | map(attribute='threats') | max) if top_threats else 1 %}
+        {% if max_th == 0 %}{% set max_th = 1 %}{% endif %}
+        {% for s in top_threats %}
+        <div class="flex items-center gap-3 mb-2.5 text-[13px]">
+          <div class="w-32 truncate text-ink-muted">{{ s.name }}</div>
+          <div class="flex-1 h-2 bg-surface-sunken rounded-full overflow-hidden">
+            <div class="h-full bg-danger" style="width: {{ (s.threats / max_th * 100) | round(1) }}%"></div>
+          </div>
+          <div class="w-20 text-right tabular text-ink font-semibold">{{ s.threats | fmt_int }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 shadow-card">
+      <div class="px-6 py-4 border-b border-line"><h2 class="text-[15px] font-semibold text-ink">Top sites by traffic ({{ days }}d)</h2></div>
+      <div class="p-5">
+        {% set max_rq = (top_traffic | map(attribute='requests') | max) if top_traffic else 1 %}
+        {% if max_rq == 0 %}{% set max_rq = 1 %}{% endif %}
+        {% for s in top_traffic %}
+        <div class="flex items-center gap-3 mb-2.5 text-[13px]">
+          <div class="w-32 truncate text-ink-muted">{{ s.name }}</div>
+          <div class="flex-1 h-2 bg-surface-sunken rounded-full overflow-hidden">
+            <div class="h-full bg-ink" style="width: {{ (s.requests / max_rq * 100) | round(1) }}%"></div>
+          </div>
+          <div class="w-20 text-right tabular text-ink font-semibold">{{ s.requests | fmt_int }}</div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if daily %}
+<script>
+(function() {
+  const fmtDay = (s) => new Date(s).toLocaleDateString([], {month:'short', day:'numeric'});
+  const days = {{ daily | map(attribute='day') | list | tojson }};
+  const requests = {{ daily | map(attribute='requests') | list | tojson }};
+  const cached   = {{ daily | map(attribute='cached')   | list | tojson }};
+  const threats  = {{ daily | map(attribute='threats')  | list | tojson }};
+  const uncached = requests.map((r, i) => r - cached[i]);
+  const labels = days.map(fmtDay);
+
+  const commonAxes = {
+    x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94A3B8', maxTicksLimit: 12 } },
+    y: { beginAtZero: true, grid: { color: '#F1F3F6' },
+         ticks: { font: { size: 11 }, color: '#94A3B8',
+                  callback: (v) => v >= 1000 ? (v/1000).toFixed(1)+'k' : v } }
+  };
+  const tooltipBase = {
+    backgroundColor: '#0F172A', padding: 12, cornerRadius: 8,
+    titleFont: { size: 12, weight: '600' }, bodyFont: { size: 12 }
+  };
+
+  // Traffic stacked bar
+  new Chart(document.getElementById('trafficChart').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Cached',     data: cached,   backgroundColor: '#10B981', stack: 'r' },
+        { label: 'Origin',     data: uncached, backgroundColor: '#0F172A', stack: 'r' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } }, tooltip: tooltipBase },
+      scales: { x: { ...commonAxes.x, stacked: true }, y: { ...commonAxes.y, stacked: true } }
+    }
+  });
+
+  // Threats bar
+  new Chart(document.getElementById('threatsChart').getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: 'Threats blocked', data: threats, backgroundColor: '#E11E27' }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: tooltipBase },
+      scales: commonAxes
+    }
+  });
+})();
+</script>
+{% endif %}
+
+{% if uptime_per_zone %}
+<script>
+(function() {
+  const data = {{ uptime_per_zone | tojson }};
+  const zones = Object.keys(data);
+  // Collect unique day axis across zones
+  const dayset = new Set();
+  zones.forEach(z => data[z].forEach(d => dayset.add(d.day)));
+  const labels = Array.from(dayset).sort();
+  const palette = ['#0F172A','#E11E27','#10B981','#3B82F6','#F59E0B','#8B5CF6','#EC4899'];
+  const fmtDay = (s) => new Date(s).toLocaleDateString([], {month:'short', day:'numeric'});
+
+  const datasets = zones.map((z, i) => {
+    const byDay = Object.fromEntries(data[z].map(d => [d.day, d.pct]));
+    return {
+      label: z,
+      data: labels.map(d => byDay[d] !== undefined ? byDay[d] : null),
+      borderColor: palette[i % palette.length],
+      backgroundColor: palette[i % palette.length] + '20',
+      tension: 0.25, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, spanGaps: true
+    };
+  });
+
+  new Chart(document.getElementById('uptimeChart').getContext('2d'), {
+    type: 'line',
+    data: { labels: labels.map(fmtDay), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, boxWidth: 12, boxHeight: 4 } },
+        tooltip: {
+          backgroundColor: '#0F172A', padding: 12, cornerRadius: 8,
+          callbacks: { label: (c) => `${c.dataset.label}: ${c.parsed.y === null ? 'n/a' : c.parsed.y.toFixed(2) + '%'}` }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#94A3B8', maxTicksLimit: 14 } },
+        y: { min: 95, max: 100.5, grid: { color: '#F1F3F6' },
+             ticks: { font: { size: 11 }, color: '#94A3B8', callback: (v) => v + '%' } }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}
