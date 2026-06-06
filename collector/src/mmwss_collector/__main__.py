@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, db, jobs, reports, scan_jobs
+from . import alerts, backup, db, jobs, reports, scan_jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -125,8 +125,16 @@ def cmd_scheduler(settings) -> int:
     sched.add_job(_wrap(scan_jobs.run_zap, settings, "scan_zap"),
                   CronTrigger(day_of_week="thu", hour=18, minute=0), id="scan_zap", max_instances=1, coalesce=True)
 
+    # ───── Daily encrypted DB backup ─────
+    # 23:30 UTC = 07:30 SGT — runs just after the daily report so it captures
+    # the freshly-generated row too.
+    sched.add_job(_wrap(backup.run_backup, settings, "backup_daily"),
+                  CronTrigger(hour=23, minute=30), id="backup_daily",
+                  max_instances=1, coalesce=True)
+
     log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily, "
-             "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl+zap/weekly")
+             "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl+zap/weekly, "
+             "backup_daily/23:30 UTC")
     try:
         sched.start()
     except (KeyboardInterrupt, SystemExit):
@@ -166,6 +174,18 @@ def cmd_wp_check(settings) -> int:
     return 0
 
 
+def cmd_backup(settings) -> int:
+    """Make an encrypted DB backup on demand."""
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        result = backup.run_backup(settings, conn)
+    if result.get("ok"):
+        log.info("backup ok: %s", result)
+        return 0
+    log.error("backup failed: %s", result)
+    return 1
+
+
 def cmd_scan(settings) -> int:
     """Run one scanner against all active zones, on demand.
     Usage:  collector scan nuclei|wpscan|testssl|headers|surface
@@ -197,6 +217,7 @@ COMMANDS = {
     "report": cmd_report,
     "wp_check": cmd_wp_check,
     "scan": cmd_scan,
+    "backup": cmd_backup,
 }
 
 

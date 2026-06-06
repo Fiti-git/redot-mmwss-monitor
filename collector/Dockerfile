@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates unzip git bash \
     ruby ruby-dev build-essential libcurl4-openssl-dev libxml2-dev libxslt1-dev zlib1g-dev \
     openssl bsdmainutils bind9-dnsutils procps \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # ───── ProjectDiscovery binaries (nuclei, subfinder, httpx) ─────

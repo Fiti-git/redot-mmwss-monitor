@@ -1,19 +1,20 @@
-"""Session-cookie auth: bcrypt password verify + signed cookie session.
+"""Session-cookie auth + 2FA + rate limiting + hash-chained audit.
 
-Pattern:
-- Login: verify password, set session["user_id"] etc. via Starlette SessionMiddleware
-- Each request: routes that need auth call `require_user(request)`
-- `require_admin(request)` for admin-only
+Login flow:
+    /login (GET/POST) → password check → if user.totp_enabled, set
+        session["pending_2fa"]=user_id and redirect to /2fa/verify;
+        else fully sign in.
 
-Auth events are recorded in mmwss.audit_log via direct INSERT.
+require_user / require_admin enforce that pending_2fa is cleared before
+the user is granted access. Admins must enable 2FA (enforced by a UI
+banner + middleware-level redirect on first login after migration 011).
 """
 from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
-from fastapi.responses import RedirectResponse
 import bcrypt
 
-from . import db
+from . import db, security
 
 
 def hash_password(plain: str) -> str:
@@ -28,9 +29,16 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def authenticate(email: str, password: str) -> dict | None:
-    """Return user dict on success, None on failure."""
+    """Return user dict on success, None on failure. Does NOT check 2FA — that's
+    a separate step in the login flow."""
     user = db.fetch_one(
-        "SELECT id, email, name, password_hash, role, is_active FROM mmwss.users WHERE email = %s",
+        """
+        SELECT id, email, name, password_hash, role, is_active,
+               totp_secret, totp_enabled, totp_confirmed_at,
+               failed_login_count, locked_until
+          FROM mmwss.users
+         WHERE email = %s
+        """,
         (email.lower().strip(),),
     )
     if not user or not user["is_active"]:
@@ -40,22 +48,30 @@ def authenticate(email: str, password: str) -> dict | None:
     return user
 
 
+# ───── Audit (hash-chained) ─────
+
+
 def record_audit(user_id: int | None, email: str | None, action: str, ip: str | None = None,
                  target_type: str | None = None, target_id: str | None = None,
                  details: dict | None = None) -> None:
-    import json as _json
-    db.execute(
-        """
-        INSERT INTO mmwss.audit_log (user_id, user_email, action, ip, target_type, target_id, details_json)
-        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
-        """,
-        (user_id, email, action, ip, target_type, target_id,
-         _json.dumps(details) if details else None),
+    """Append a hash-chained audit row. Each row's hash links to the
+    previous one so deletions/edits break the chain visibly."""
+    security.write_audit_hashed(
+        db,
+        user_id=user_id, user_email=email, action=action, ip=ip,
+        target_type=target_type, target_id=target_id,
+        details=details,
     )
+
+
+# ───── Session helpers ─────
 
 
 def current_user(request: Request) -> dict | None:
     s = request.session
+    # If pending_2fa is set, the user is NOT considered authenticated.
+    if s.get("pending_2fa"):
+        return None
     if not s.get("user_id"):
         return None
     return {
@@ -66,12 +82,32 @@ def current_user(request: Request) -> dict | None:
     }
 
 
+def pending_2fa_user_id(request: Request) -> int | None:
+    return request.session.get("pending_2fa")
+
+
+def finalize_login(request: Request, user: dict) -> None:
+    """Mark the session as fully authenticated. Called from /login (no 2FA)
+    or from /2fa/verify after the code passes."""
+    request.session["user_id"] = int(user["id"])
+    request.session["email"] = user["email"]
+    request.session["name"] = user["name"]
+    request.session["role"] = user["role"]
+    request.session.pop("pending_2fa", None)
+
+
 def require_user(request: Request) -> dict:
-    """Use as a FastAPI dependency. Redirects to login on miss."""
+    """FastAPI dep. Redirects to /login if not signed in. If 2FA is pending,
+    redirects to /2fa/verify."""
+    from .config import get_settings
+    base = get_settings().base_path
+    if request.session.get("pending_2fa"):
+        raise HTTPException(
+            status_code=status.HTTP_303_SEE_OTHER,
+            headers={"Location": f"{base}/2fa/verify"},
+        )
     u = current_user(request)
     if not u:
-        from .config import get_settings
-        base = get_settings().base_path
         raise HTTPException(
             status_code=status.HTTP_303_SEE_OTHER,
             headers={"Location": f"{base}/login?next={request.url.path}"},

@@ -90,6 +90,12 @@
           <div class="text-[11px] text-ink-muted truncate" title="{{ user.email }}">{{ user.email }}</div>
         </div>
       </div>
+      <div class="mt-2">
+        <a href="{{ base_path }}/2fa/setup" class="text-[11px] text-ink-muted hover:text-brand flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-3 h-3"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+          Two-factor authentication
+        </a>
+      </div>
       <div class="flex items-center justify-between mt-2.5">
         <span class="text-[10px] uppercase tracking-wider bg-white border border-line text-ink-muted px-1.5 py-0.5 rounded font-semibold">{{ user.role }}</span>
         <form method="post" action="{{ base_path }}/logout">

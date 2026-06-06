@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Two-factor verification — MMWSS{% endblock %}
+
+{% block body %}
+<div class="min-h-screen flex items-center justify-center bg-surface-alt px-6 py-10">
+  <div class="w-full max-w-[400px]">
+    <div class="flex items-center gap-3 mb-7 justify-center">
+      <img src="{{ base_path }}/static/img/redot-icon.svg" alt="Redot" class="w-11 h-11 rounded-lg">
+      <div>
+        <div class="text-lg font-semibold text-ink tracking-tight">MMWSS</div>
+        <div class="text-[11px] text-ink-muted font-medium uppercase tracking-wider">Two-factor verification</div>
+      </div>
+    </div>
+
+    <h2 class="text-[24px] font-bold text-ink tracking-tight">Enter your 6-digit code</h2>
+    <p class="text-[13.5px] text-ink-muted mt-1.5">Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy, etc.) and enter the current code.</p>
+
+    <form method="post" action="{{ base_path }}/2fa/verify" class="mt-6 space-y-4">
+      <input name="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="8" autofocus required
+             autocomplete="one-time-code"
+             placeholder="123456"
+             class="w-full h-12 px-3.5 bg-white border border-line rounded-lg text-[22px] text-ink text-center tracking-[0.4em] font-mono tabular
+                    focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand shadow-card">
+      {% if error %}
+      <div class="flex items-start gap-2 text-[13px] text-danger-dark bg-danger-soft border border-danger/20 rounded-lg px-3.5 py-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>{{ error }}</span>
+      </div>
+      {% endif %}
+      <button type="submit"
+              class="w-full h-11 bg-brand hover:bg-brand-600 text-white font-semibold text-[14px] rounded-lg shadow-card">
+        Verify
+      </button>
+    </form>
+
+    <div class="mt-8 pt-6 border-t border-line text-center">
+      <form method="post" action="{{ base_path }}/logout" class="inline">
+        <button class="text-[12px] text-ink-subtle hover:text-brand">← Cancel and sign out</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

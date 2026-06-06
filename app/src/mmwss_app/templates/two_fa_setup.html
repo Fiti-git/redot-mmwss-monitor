@@ -1,0 +1,99 @@
+{% extends "_app_shell.html" %}
+{% block title %}Two-factor authentication — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[720px]">
+  <div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">Two-factor authentication</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">
+      Add a second layer of protection to your MMWSS account using any free TOTP authenticator app.
+    </p>
+  </div>
+
+  {% if enrolled %}
+  <div class="bg-ok-soft border border-ok/30 rounded-xl2 p-5">
+    <div class="flex items-start gap-3">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-5 h-5 text-ok-dark mt-0.5"><polyline points="20 6 9 17 4 12"/></svg>
+      <div>
+        <div class="text-[14px] font-semibold text-ok-dark">2FA is active on this account</div>
+        <p class="text-[12.5px] text-ink-muted mt-1">Every sign-in will require a 6-digit code from your authenticator app after your password.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card p-6">
+    <h2 class="text-[15px] font-semibold text-ink mb-2">Disable 2FA</h2>
+    <p class="text-[12.5px] text-ink-muted mb-4">Removing 2FA weakens your account. Confirm your password to disable.</p>
+    <form method="post" action="{{ base_path }}/2fa/disable" class="flex gap-3 max-w-md">
+      <input type="password" name="password" required placeholder="Current password"
+             class="flex-1 h-11 px-3 bg-white border border-line rounded-lg text-[14px]
+                    focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      <button class="h-11 px-5 bg-danger hover:bg-danger-dark text-white font-semibold text-[13px] rounded-md">
+        Disable
+      </button>
+    </form>
+  </div>
+
+  {% else %}
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-6 py-4 border-b border-line">
+      <div class="text-[13px] font-semibold text-ink-muted uppercase tracking-wider">Step 1</div>
+      <div class="text-[15px] font-semibold text-ink mt-0.5">Install an authenticator app on your phone</div>
+    </div>
+    <div class="px-6 py-4 text-[13px] text-ink-muted">
+      Any free TOTP app works. Recommended:
+      <div class="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2 text-[12px]">
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Google Authenticator</div>
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Microsoft Authenticator</div>
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Authy</div>
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Bitwarden</div>
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Aegis (Android)</div>
+        <div class="px-3 py-2 bg-surface-sunken rounded-md text-ink">Raivo OTP (iOS)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-6 py-4 border-b border-line">
+      <div class="text-[13px] font-semibold text-ink-muted uppercase tracking-wider">Step 2</div>
+      <div class="text-[15px] font-semibold text-ink mt-0.5">Scan this QR code in your app</div>
+    </div>
+    <div class="px-6 py-6 flex flex-col sm:flex-row items-center gap-6">
+      <div class="bg-paper rounded-lg shrink-0" style="background:#fbf8f1; padding: 8px; border: 1px solid #e5e7eb;">
+        {{ qr_svg | safe }}
+      </div>
+      <div class="text-[13px] text-ink-muted">
+        Or enter this secret manually:
+        <div class="mt-2 p-3 bg-surface-sunken rounded font-mono text-[12.5px] text-ink break-all select-all">{{ secret }}</div>
+        <div class="text-[11px] text-ink-subtle mt-2">Treat this as a password. Anyone with this secret can generate valid codes for your account.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-6 py-4 border-b border-line">
+      <div class="text-[13px] font-semibold text-ink-muted uppercase tracking-wider">Step 3</div>
+      <div class="text-[15px] font-semibold text-ink mt-0.5">Enter the 6-digit code your app shows</div>
+    </div>
+    <form method="post" action="{{ base_path }}/2fa/setup" class="px-6 py-5 space-y-4">
+      <input name="code" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="8" autofocus required
+             autocomplete="one-time-code" placeholder="123456"
+             class="w-full sm:w-1/2 h-12 px-3.5 bg-white border border-line rounded-lg text-[22px] text-ink text-center tracking-[0.4em] font-mono tabular
+                    focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      {% if error %}
+      <div class="flex items-start gap-2 text-[13px] text-danger-dark bg-danger-soft border border-danger/20 rounded-lg px-3.5 py-2.5">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="w-4 h-4 mt-0.5 shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span>{{ error }}</span>
+      </div>
+      {% endif %}
+      <button type="submit"
+              class="h-11 px-5 bg-brand hover:bg-brand-600 text-white font-semibold text-[14px] rounded-lg shadow-card">
+        Confirm and enable 2FA
+      </button>
+    </form>
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

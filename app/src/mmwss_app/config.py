@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     cookie_samesite: str = "lax"
 
+    # Public origin(s), comma-separated. Used by Origin/Referer CSRF defence.
+    mmwss_public_url: str = "https://coldcalling.redotglobal.agency"
+
 
 _settings: Settings | None = None
 

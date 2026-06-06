@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import auth, filters
+from . import auth, filters, security
 from .config import get_settings
 from .routes import (
     api_routes,
@@ -40,6 +40,10 @@ BASE_PATH = settings.base_path  # "/mmwss"
 
 app = FastAPI(title="MMWSS", docs_url=None, redoc_url=None, openapi_url=None)
 
+# Middleware order: outer (added LAST) runs first. We want:
+#   request  → SecurityHeaders → OriginCheck → Session → routes
+#   response → routes → Session → OriginCheck → SecurityHeaders
+# So add: Session, OriginCheck, SecurityHeaders (in that order).
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -49,6 +53,13 @@ app.add_middleware(
     session_cookie="mmwss_session",
     path="/",
 )
+
+_PUBLIC_HOSTS = [h.strip().lower() for h in (
+    getattr(settings, "mmwss_public_url", "") or "https://coldcalling.redotglobal.agency"
+).replace("https://", "").replace("http://", "").rstrip("/").split(",") if h.strip()]
+
+app.add_middleware(security.OriginCheckMiddleware, allowed_hosts=_PUBLIC_HOSTS)
+app.add_middleware(security.SecurityHeadersMiddleware)
 
 # Static + templates (also under /mmwss/static so links in templates work)
 app.mount(f"{BASE_PATH}/static", StaticFiles(directory=STATIC_DIR), name="static")
