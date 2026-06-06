@@ -15,13 +15,28 @@ templates: Jinja2Templates = None  # type: ignore  set in main
 @router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, user: dict = Depends(auth.require_user)):
     stats = queries.overview_stats()
-    zones = queries.zones_with_status()
+    zones = queries.zones_scored()
     traffic = queries.overview_traffic_24h()
     uptime = queries.overview_uptime_24h()
+    security = queries.aggregate_security_score()
     return templates.TemplateResponse(
         "dashboard.html",
         {"request": request, "user": user, "stats": stats, "zones": zones,
-         "traffic": traffic, "uptime": uptime, "active": "dashboard"},
+         "traffic": traffic, "uptime": uptime, "security": security, "active": "dashboard"},
+    )
+
+
+@router.get("/recommendations", response_class=HTMLResponse)
+def recommendations_page(request: Request, user: dict = Depends(auth.require_user)):
+    items = queries.all_recommendations()
+    sec = queries.aggregate_security_score()
+    by_sev = {"critical": [], "warning": [], "info": []}
+    for r in items:
+        by_sev.setdefault(r["severity"], []).append(r)
+    return templates.TemplateResponse(
+        "recommendations.html",
+        {"request": request, "user": user, "items": items, "by_sev": by_sev,
+         "security": sec, "active": "recommendations"},
     )
 
 
@@ -45,13 +60,14 @@ def zone_detail(request: Request, zone_id: int, user: dict = Depends(auth.requir
     traffic = queries.zone_traffic_24h(zone_id)
     uptime_sum = queries.zone_uptime_24h_summary(zone_id)
     incidents = queries.zone_incidents(zone_id, limit=10)
+    recs = queries.zone_recommendations(zone_id)
     return templates.TemplateResponse(
         "zone_detail.html",
         {
             "request": request, "user": user, "active": "zones",
             "zone": zone, "snapshot": snapshot, "dns_records": dns_records,
             "uptime": uptime, "traffic": traffic, "uptime_sum": uptime_sum,
-            "incidents": incidents,
+            "incidents": incidents, "recommendations": recs,
         },
     )
 

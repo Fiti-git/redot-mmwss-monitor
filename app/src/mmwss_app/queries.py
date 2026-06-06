@@ -266,6 +266,114 @@ def list_cf_tokens() -> list[dict]:
     )
 
 
+def all_recommendations() -> list[dict]:
+    """Run the rule engine across every active zone using each one's
+    latest snapshot. Returns a flat list of dicts, one per firing rule,
+    annotated with zone metadata so the template can render rows directly.
+    """
+    from . import recommendations as recs
+    rows = db.fetch_all(
+        """
+        WITH latest_snap AS (
+            SELECT DISTINCT ON (zone_id) zone_id, settings_json, ssl_expiry,
+                                          fw_rules_total
+            FROM mmwss.zone_snapshots ORDER BY zone_id, captured_at DESC
+        )
+        SELECT z.id AS zone_id, z.name, z.plan,
+               s.settings_json, s.ssl_expiry, s.fw_rules_total
+        FROM mmwss.zones z
+        LEFT JOIN latest_snap s ON s.zone_id = z.id
+        WHERE z.status = 'active'
+        ORDER BY z.name
+        """
+    )
+    out: list[dict] = []
+    for r in rows:
+        for rec in recs.evaluate(
+            name=r["name"], settings=r["settings_json"],
+            ssl_expiry=r["ssl_expiry"], fw_rules_total=r["fw_rules_total"],
+        ):
+            out.append({
+                "zone_id": r["zone_id"], "zone_name": r["name"], "plan": r["plan"],
+                "severity": rec.severity, "title": rec.title, "body": rec.body,
+                "rule_id": rec.rule_id,
+            })
+    severity_order = {"critical": 0, "warning": 1, "info": 2}
+    out.sort(key=lambda r: (severity_order.get(r["severity"], 9), r["zone_name"]))
+    return out
+
+
+def zone_recommendations(zone_id: int) -> list[dict]:
+    """Same as all_recommendations() but scoped to one zone."""
+    from . import recommendations as recs
+    snap = db.fetch_one(
+        """
+        SELECT z.name, s.settings_json, s.ssl_expiry, s.fw_rules_total
+        FROM mmwss.zones z
+        LEFT JOIN LATERAL (
+            SELECT settings_json, ssl_expiry, fw_rules_total
+            FROM mmwss.zone_snapshots
+            WHERE zone_id = z.id ORDER BY captured_at DESC LIMIT 1
+        ) s ON true
+        WHERE z.id = %s
+        """,
+        (zone_id,),
+    )
+    if not snap:
+        return []
+    items = recs.evaluate(
+        name=snap["name"], settings=snap["settings_json"],
+        ssl_expiry=snap["ssl_expiry"], fw_rules_total=snap["fw_rules_total"],
+    )
+    return [
+        {"severity": r.severity, "title": r.title, "body": r.body, "rule_id": r.rule_id}
+        for r in items
+    ]
+
+
+def zones_scored() -> list[dict]:
+    """Same shape as zones_with_status() but with an extra 'score' field
+    (0-100) and 'rec_count' / 'rec_critical' for the dashboard table.
+    """
+    from . import recommendations as recs
+    base = zones_with_status()
+    enriched = []
+    for z in base:
+        items = recs.evaluate(
+            name=z["name"],
+            settings=z.get("settings_json") or {},
+            ssl_expiry=z.get("ssl_expiry"),
+            fw_rules_total=z.get("fw_rules_total"),
+        )
+        score = recs.calculate_score(items)
+        letter, color = recs.score_to_grade(score)
+        enriched.append({
+            **z,
+            "score": score,
+            "grade": letter,
+            "grade_color": color,
+            "rec_count": len(items),
+            "rec_critical": sum(1 for r in items if r.severity == "critical"),
+            "rec_warning":  sum(1 for r in items if r.severity == "warning"),
+            "rec_info":     sum(1 for r in items if r.severity == "info"),
+        })
+    return enriched
+
+
+def aggregate_security_score() -> dict:
+    """Average score + counts across all sites."""
+    zs = zones_scored()
+    if not zs:
+        return {"score": None, "rec_count": 0, "rec_critical": 0, "rec_warning": 0, "rec_info": 0}
+    return {
+        "score": int(round(sum(z["score"] for z in zs) / len(zs))),
+        "rec_count":    sum(z["rec_count"] for z in zs),
+        "rec_critical": sum(z["rec_critical"] for z in zs),
+        "rec_warning":  sum(z["rec_warning"] for z in zs),
+        "rec_info":     sum(z["rec_info"] for z in zs),
+    }
+
+
 def list_reports(limit: int = 50) -> list[dict]:
     return db.fetch_all(
         """

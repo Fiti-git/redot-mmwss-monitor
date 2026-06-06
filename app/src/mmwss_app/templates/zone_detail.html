@@ -146,6 +146,37 @@
     </table>
   </div>
 
+  <!-- Recommendations -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-6 py-3.5 border-b border-line flex justify-between items-center">
+      <h2 class="text-[15px] font-semibold text-ink">Recommendations</h2>
+      <span class="text-[12px] text-ink-muted">{{ recommendations | length }} active</span>
+    </div>
+    <div class="p-4">
+    {% if recommendations %}
+      {% for r in recommendations %}
+        {% set border = 'border-l-danger' if r.severity == 'critical' else ('border-l-warn' if r.severity == 'warning' else 'border-l-info') %}
+        <div class="bg-surface-alt border-l-4 {{ border }} rounded-r-md p-3 mb-2 last:mb-0">
+          <div class="flex items-center gap-2 mb-1">
+            {% if r.severity == 'critical' %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">Critical</span>
+            {% elif r.severity == 'warning' %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-warn-soft text-warn-dark">Warning</span>
+            {% else %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">Info</span>{% endif %}
+            <span class="text-[13px] font-semibold text-ink">{{ r.title }}</span>
+          </div>
+          <div class="text-[12.5px] text-ink-muted leading-relaxed">{{ r.body }}</div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="text-center py-8 text-ink-muted text-[13px]">
+        <div class="inline-flex flex-col items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-ok"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <div class="font-medium text-ink">No issues detected</div>
+        </div>
+      </div>
+    {% endif %}
+    </div>
+  </div>
+
   <!-- DNS records -->
   <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
     <div class="px-6 py-3.5 border-b border-line flex justify-between items-center">

@@ -32,8 +32,22 @@
 
   <!-- KPI cards -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    {{ stat_card('Active sites', stats.zones | fmt_int, 'monitored continuously', 'ink',
-       '<path d="M2 12a10 10 0 0020 0 10 10 0 00-20 0zM2 12h20M12 2a14 14 0 010 20M12 2a14 14 0 000 20"/>') }}
+    {% set sec_color = 'ok' if security.score and security.score >= 85 else ('warn' if security.score and security.score >= 70 else 'danger') %}
+    <div class="bg-white border border-line rounded-xl2 p-5 shadow-card">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">Security score</div>
+        <a href="{{ base_path }}/recommendations" class="text-[10px] text-ink-muted hover:text-brand font-medium uppercase tracking-wider">view all →</a>
+      </div>
+      <div class="flex items-baseline gap-2 mt-2.5">
+        <div class="text-[26px] font-bold tabular tracking-tight text-{{ sec_color }}">{{ security.score if security.score is not none else '—' }}</div>
+        <div class="text-[12px] text-ink-muted">/ 100</div>
+      </div>
+      <div class="text-[12px] text-ink-muted mt-0.5">
+        {% if security.rec_critical > 0 %}<span class="text-danger font-semibold">{{ security.rec_critical }} critical</span> · {% endif %}
+        {% if security.rec_warning > 0 %}<span class="text-warn-dark font-semibold">{{ security.rec_warning }} warning</span> · {% endif %}
+        {{ security.rec_count }} total
+      </div>
+    </div>
     {{ stat_card('Requests (24h)', stats.requests_24h | fmt_int, stats.bytes_24h | human_bytes ~ ' served', 'info',
        '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>') }}
     {{ stat_card('Cache hit ratio', stats.hit_ratio | fmt_pct(1), (stats.cached_24h | fmt_int) ~ ' cached', 'ok',
@@ -84,8 +98,8 @@
       <thead class="bg-surface-sunken">
         <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
           <th class="text-left px-6 py-3">Site</th>
-          <th class="text-left px-6 py-3">Plan</th>
           <th class="text-left px-6 py-3">Status</th>
+          <th class="text-left px-6 py-3">Score</th>
           <th class="text-right px-6 py-3">Latency</th>
           <th class="text-right px-6 py-3">Req (24h)</th>
           <th class="text-right px-6 py-3">Cache hit</th>
@@ -99,8 +113,8 @@
         <tr class="border-t border-line hover:bg-surface-sunken transition-colors group">
           <td class="px-6 py-3.5">
             <a href="{{ base_path }}/zones/{{ z.id }}" class="text-ink font-semibold text-[14px] hover:text-brand transition-colors">{{ z.name }}</a>
+            <div class="text-[11px] text-ink-muted">{{ z.plan or '—' }}</div>
           </td>
-          <td class="px-6 py-3.5 text-[13px] text-ink-muted">{{ z.plan or '—' }}</td>
           <td class="px-6 py-3.5">
             {% if z.uptime_ok is none %}
             <span class="inline-flex items-center gap-1.5 text-[12px] text-ink-subtle">
@@ -115,6 +129,17 @@
               <span class="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></span>down
             </span>
             {% endif %}
+          </td>
+          <td class="px-6 py-3.5">
+            <div class="flex items-center gap-2">
+              <div class="text-[14px] font-bold tabular text-{{ z.grade_color }}">{{ z.score }}</div>
+              <span class="text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded bg-{{ z.grade_color }}-soft text-{{ z.grade_color }}-dark">{{ z.grade }}</span>
+              {% if z.rec_critical > 0 %}
+              <span class="text-[10px] text-danger font-medium">{{ z.rec_critical }} crit</span>
+              {% elif z.rec_count > 0 %}
+              <span class="text-[10px] text-ink-muted">{{ z.rec_count }} item{{ '' if z.rec_count == 1 else 's' }}</span>
+              {% endif %}
+            </div>
           </td>
           <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink-muted">{% if z.latency_ms %}{{ z.latency_ms }} ms{% else %}—{% endif %}</td>
           <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink font-medium">{{ z.requests | fmt_int }}</td>
