@@ -146,6 +146,54 @@
     </table>
   </div>
 
+  <!-- WordPress Health -->
+  {% if wp %}
+  {% set f = wp.findings_json or {} %}
+  {% set crit_exposures = (f.get('exposures', []) | selectattr('severity', 'eq', 'critical') | list) %}
+  {% set warn_exposures = (f.get('exposures', []) | selectattr('severity', 'eq', 'warning') | list) %}
+  {% set health_issues = f.get('health', []) %}
+  {% set config_issues = f.get('config', []) %}
+  {% set info_items    = f.get('info', []) %}
+  {% set total = (f.get('exposures', []) | length) + (f.get('config', []) | length) + (f.get('health', []) | length) + (f.get('info', []) | length) %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card">
+    <div class="px-6 py-3.5 border-b border-line flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4 text-ink-muted"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        <h2 class="text-[15px] font-semibold text-ink">WordPress health</h2>
+        {% if wp.is_wordpress %}
+        <span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">WordPress {% if wp.wp_version %}{{ wp.wp_version }}{% endif %}</span>
+        {% else %}
+        <span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">not WordPress</span>
+        {% endif %}
+      </div>
+      <span class="text-[12px] text-ink-muted">checked {{ wp.captured_at | time_ago }} · home {{ wp.home_status or '—' }} ({{ wp.home_latency_ms or '?' }}ms)</span>
+    </div>
+    <div class="p-4">
+      {% if total == 0 %}
+        <div class="text-center py-6 text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-1.5">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 text-ok"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <div class="font-medium text-ink">No WordPress issues detected</div>
+          </div>
+        </div>
+      {% else %}
+        {% for f_item in (crit_exposures + health_issues + warn_exposures + config_issues + info_items) %}
+          {% set border = 'border-l-danger' if f_item.severity == 'critical' else ('border-l-warn' if f_item.severity == 'warning' else 'border-l-info') %}
+          <div class="bg-surface-alt border-l-4 {{ border }} rounded-r-md p-3 mb-2 last:mb-0">
+            <div class="flex items-center gap-2 mb-1">
+              {% if f_item.severity == 'critical' %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">Critical</span>
+              {% elif f_item.severity == 'warning' %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-warn-soft text-warn-dark">Warning</span>
+              {% else %}<span class="text-[10px] uppercase tracking-wide font-semibold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">Info</span>{% endif %}
+              <span class="font-mono text-[11px] text-ink-muted">{{ f_item.check }}</span>
+            </div>
+            <div class="text-[12.5px] text-ink leading-relaxed">{{ f_item.details }}</div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+
   <!-- Recommendations -->
   <div class="bg-white border border-line rounded-xl2 shadow-card">
     <div class="px-6 py-3.5 border-b border-line flex justify-between items-center">

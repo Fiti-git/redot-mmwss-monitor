@@ -254,6 +254,59 @@ def uptime_summary_all() -> list[dict]:
     )
 
 
+def latest_wp_check(zone_id: int) -> dict | None:
+    return db.fetch_one(
+        """
+        SELECT id, captured_at, is_wordpress, wp_version, home_status,
+               home_latency_ms, findings_json
+        FROM mmwss.wp_checks
+        WHERE zone_id = %s
+        ORDER BY captured_at DESC
+        LIMIT 1
+        """,
+        (zone_id,),
+    )
+
+
+def wp_findings_all() -> list[dict]:
+    """Flatten the latest wp_checks into a row-per-finding list for the
+    Recommendations page / a dedicated WP page."""
+    rows = db.fetch_all(
+        """
+        WITH latest AS (
+            SELECT DISTINCT ON (zone_id) zone_id, captured_at,
+                   is_wordpress, wp_version, findings_json
+            FROM mmwss.wp_checks
+            ORDER BY zone_id, captured_at DESC
+        )
+        SELECT z.id AS zone_id, z.name, l.is_wordpress, l.wp_version,
+               l.findings_json, l.captured_at
+        FROM mmwss.zones z
+        JOIN latest l ON l.zone_id = z.id
+        WHERE z.status = 'active'
+        ORDER BY z.name
+        """
+    )
+    out: list[dict] = []
+    sev_order = {"critical": 0, "warning": 1, "info": 2}
+    for r in rows:
+        for bucket in ("exposures", "config", "health", "info"):
+            for f in (r["findings_json"] or {}).get(bucket, []):
+                out.append({
+                    "zone_id": r["zone_id"],
+                    "zone_name": r["name"],
+                    "is_wordpress": r["is_wordpress"],
+                    "wp_version": r["wp_version"],
+                    "captured_at": r["captured_at"],
+                    "bucket": bucket,
+                    "severity": f.get("severity", "info"),
+                    "check": f.get("check"),
+                    "details": f.get("details", ""),
+                })
+    out.sort(key=lambda x: (sev_order.get(x["severity"], 9), x["zone_name"]))
+    return out
+
+
 def list_users() -> list[dict]:
     return db.fetch_all(
         "SELECT id, email, name, role, is_active, created_at, last_login_at FROM mmwss.users ORDER BY email"

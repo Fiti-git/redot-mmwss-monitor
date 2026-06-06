@@ -61,13 +61,14 @@ def zone_detail(request: Request, zone_id: int, user: dict = Depends(auth.requir
     uptime_sum = queries.zone_uptime_24h_summary(zone_id)
     incidents = queries.zone_incidents(zone_id, limit=10)
     recs = queries.zone_recommendations(zone_id)
+    wp = queries.latest_wp_check(zone_id)
     return templates.TemplateResponse(
         "zone_detail.html",
         {
             "request": request, "user": user, "active": "zones",
             "zone": zone, "snapshot": snapshot, "dns_records": dns_records,
             "uptime": uptime, "traffic": traffic, "uptime_sum": uptime_sum,
-            "incidents": incidents, "recommendations": recs,
+            "incidents": incidents, "recommendations": recs, "wp": wp,
         },
     )
 

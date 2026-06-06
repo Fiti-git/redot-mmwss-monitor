@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from . import alerts, db
+from . import alerts, db, wp_checks
 from .cloudflare import CloudflareClient, CloudflareError
 from .config import Settings
 
@@ -250,3 +250,37 @@ def take_snapshot(settings: Settings, conn) -> int:
         conn.commit()
         snapshots_taken += 1
     return snapshots_taken
+
+
+# ───────── WordPress synthetic checks ─────────
+
+
+def run_wp_checks(settings: Settings, conn) -> int:
+    """For each active zone, run the WP synthetic-check battery and store the result."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM mmwss.zones WHERE status = 'active' ORDER BY name")
+        zones = cur.fetchall()
+
+    count = 0
+    for z in zones:
+        try:
+            result = wp_checks.run_checks(z["name"])
+        except Exception:
+            log.exception("wp_checks crashed for %s — skipping", z["name"])
+            continue
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO mmwss.wp_checks
+                    (zone_id, is_wordpress, wp_version, home_status, home_latency_ms, findings_json)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb)
+                """,
+                (z["id"], result["is_wordpress"], result["wp_version"],
+                 result["home_status"], result["home_latency_ms"],
+                 json.dumps(result["findings"])),
+            )
+        conn.commit()
+        count += 1
+        crit = sum(1 for f in result["findings"].get("exposures", []) if f.get("severity") == "critical")
+        log.info("wp_checks %s: is_wp=%s status=%s crit_exposures=%d", z["name"], result["is_wordpress"], result["home_status"], crit)
+    return count

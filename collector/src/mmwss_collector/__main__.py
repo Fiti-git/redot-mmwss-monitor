@@ -86,6 +86,8 @@ def cmd_scheduler(settings) -> int:
                   CronTrigger(minute=5), id="analytics", max_instances=1, coalesce=True)
     sched.add_job(_wrap(jobs.take_snapshot, settings, "take_snapshot"),
                   CronTrigger(hour="*/6", minute=10), id="snapshot", max_instances=1, coalesce=True)
+    sched.add_job(_wrap(jobs.run_wp_checks, settings, "wp_checks"),
+                  CronTrigger(hour="*/6", minute=20), id="wp_checks", max_instances=1, coalesce=True)
     sched.add_job(_wrap(sync_all_zones, settings, "sync_zones"),
                   CronTrigger(hour=2, minute=0), id="zone_sync", max_instances=1, coalesce=True)
 
@@ -138,12 +140,22 @@ def cmd_report(settings) -> int:
     return 0
 
 
+def cmd_wp_check(settings) -> int:
+    """Run WP synthetic checks against all active zones, on demand."""
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        n = jobs.run_wp_checks(settings, conn)
+    log.info("WP checks complete: %d zones probed", n)
+    return 0
+
+
 COMMANDS = {
     "migrate": cmd_migrate,
     "sync": cmd_sync,
     "scheduler": cmd_scheduler,
     "test_alert": cmd_test_alert,
     "report": cmd_report,
+    "wp_check": cmd_wp_check,
 }
 
 
