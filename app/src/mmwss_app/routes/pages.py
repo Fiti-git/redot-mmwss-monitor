@@ -168,6 +168,28 @@ def _serve_report(report_id: int, fmt: str, user: dict):
     return FileResponse(str(p), media_type=media, filename=download_name)
 
 
+@router.get("/reports/{report_id}/book", response_class=HTMLResponse)
+def report_book(report_id: int, request: Request, user: dict = Depends(auth.require_user)):
+    """Flipbook viewer — paper-textured, page-turn animation, audio."""
+    r = db.fetch_one(
+        """
+        SELECT id, type, period_start, period_end, generated_at,
+               (summary_json->>'period_label') AS period_label,
+               html_path, pdf_path
+          FROM mmwss.reports WHERE id = %s
+        """,
+        (report_id,),
+    )
+    if not r:
+        raise HTTPException(404, "Report not found")
+    if not r.get("pdf_path"):
+        raise HTTPException(404, "PDF not available for this report")
+    return templates.TemplateResponse(
+        "report_view.html",
+        {"request": request, "user": user, "r": r, "active": "reports"},
+    )
+
+
 @router.get("/reports/{report_id}/html")
 def report_html(report_id: int, user: dict = Depends(auth.require_user)):
     return _serve_report(report_id, "html", user)
