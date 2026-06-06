@@ -91,14 +91,23 @@ def _env() -> Environment:
 # ───────── queries (period-scoped) ─────────
 
 
+def _q1(conn, sql, params=()):
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchone()
+
+
+def _qn(conn, sql, params=()):
+    with conn.cursor() as cur:
+        cur.execute(sql, params)
+        return cur.fetchall()
+
+
 def _overview(conn, start, end) -> dict:
-    zones = db.fetch_one(
-        "SELECT COUNT(*)::int AS n FROM mmwss.zones WHERE status = 'active'"
-    )["n"]
-    open_inc = db.fetch_one(
-        "SELECT COUNT(*)::int AS n FROM mmwss.incidents WHERE ended_at IS NULL"
-    )["n"]
-    t = db.fetch_one(
+    zones = _q1(conn, "SELECT COUNT(*)::int AS n FROM mmwss.zones WHERE status = 'active'")["n"]
+    open_inc = _q1(conn, "SELECT COUNT(*)::int AS n FROM mmwss.incidents WHERE ended_at IS NULL")["n"]
+    t = _q1(
+        conn,
         """
         SELECT COALESCE(SUM(requests), 0)::bigint AS req,
                COALESCE(SUM(cached_requests), 0)::bigint AS cached,
@@ -123,7 +132,8 @@ def _overview(conn, start, end) -> dict:
 
 
 def _sites(conn, start, end) -> list[dict]:
-    rows = db.fetch_all(
+    rows = _qn(
+        conn,
         """
         WITH traffic AS (
             SELECT zone_id,
@@ -191,7 +201,8 @@ def _sites(conn, start, end) -> list[dict]:
 
 
 def _incidents(conn, start, end) -> list[dict]:
-    rows = db.fetch_all(
+    rows = _qn(
+        conn,
         """
         SELECT i.id, i.zone_id, z.name AS zone_name, i.type, i.severity,
                i.started_at, i.ended_at, i.summary
