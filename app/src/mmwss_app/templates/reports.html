@@ -26,12 +26,10 @@
           <td class="px-6 py-3.5 text-[13px] text-ink-muted">{{ r.generated_at | datetime_str }}</td>
           <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink-muted">{{ r.downloaded_count }}</td>
           <td class="px-6 py-3.5 text-[13px] text-right">
-            {% if r.pdf_path %}<a class="inline-flex items-center gap-1 px-2.5 py-1 bg-brand hover:bg-brand-600 text-white font-semibold text-[11.5px] rounded mr-2" href="{{ base_path }}/reports/{{ r.id }}/book" target="_blank" title="Open as flipbook (paper feel, page-turn sound)">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2zM22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-              Open as book
-            </a>{% endif %}
-            {% if r.html_path %}<a class="text-brand font-medium hover:underline" href="{{ base_path }}/reports/{{ r.id }}/html" target="_blank">HTML</a>{% endif %}
-            {% if r.pdf_path %}<a class="text-brand font-medium hover:underline ml-3" href="{{ base_path }}/reports/{{ r.id }}/pdf">PDF</a>{% endif %}
+            {% if r.pdf_path %}<a class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand hover:bg-brand-600 text-white font-semibold text-[12px] rounded-md shadow-card" href="{{ base_path }}/reports/{{ r.id }}/pdf">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-3.5 h-3.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Download PDF
+            </a>{% else %}<span class="text-ink-subtle">—</span>{% endif %}
           </td>
         </tr>
         {% else %}

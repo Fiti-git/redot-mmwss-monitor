@@ -1,17 +1,16 @@
-{# MMWSS Report — corporate-grade design (Build Guide spec compliance).
-   One template, branches on `report_type` per the section scope matrix.
-   CSS inlined for WeasyPrint; logos embedded as base64 data URIs so the
-   HTML is fully self-contained. #}
+{# MMWSS Report — print-first design.
+   ALL grid layouts replaced with <table> markup so WeasyPrint 62.3 renders
+   them with proper alignment. Browser preview still works via @media screen. #}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>MMWSS Report — {{ report_type | title }} · {{ period_label }}</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 <style>
+/* ───────── Page sizing — A4 ───────── */
+@page { size: A4; margin: 0; }
+
 :root {
   --red:       #E11B22;
   --red-dark:  #B3141A;
@@ -24,625 +23,1011 @@
   --line-2:    #EEF0F3;
   --panel:     #F6F7F9;
   --panel-2:   #FBFBFC;
-  --white:     #FFFFFF;
   --pos:       #1F9D63;
   --pos-tint:  #E7F4EE;
   --neg:       #D5342B;
   --neg-tint:  #FBEAE9;
 
-  --sans: "IBM Plex Sans", system-ui, sans-serif;
-  --head: "Archivo", system-ui, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --sans: "IBM Plex Sans", Helvetica, Arial, sans-serif;
+  --head: "Archivo", Helvetica, Arial, sans-serif;
+  --mono: "IBM Plex Mono", "Courier New", monospace;
 
-  --pad: 18mm;
+  --pad: 16mm;
 }
+
 * { box-sizing: border-box; }
-html, body { margin: 0; padding: 0; background: #54565a; font-family: var(--sans); color: var(--ink); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 
-.page { position: relative; width: 210mm; min-height: 297mm; margin: 8mm auto; background: var(--white); box-shadow: 0 4px 24px rgba(0,0,0,.28); padding: var(--pad); display: flex; flex-direction: column; overflow: hidden; }
-.page__body { flex: 1 1 auto; }
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  font-family: var(--sans);
+  color: var(--ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
 
-.runhead { display: flex; align-items: center; justify-content: space-between; padding-bottom: 7mm; margin-bottom: 8mm; border-bottom: 1.5px solid var(--ink); }
-.runhead img { height: 26px; width: auto; display: block; }
-.runhead__meta { text-align: right; font-family: var(--mono); font-size: 8.5px; letter-spacing: .04em; line-height: 1.5; color: var(--muted); text-transform: uppercase; }
-.runhead__meta b { color: var(--ink); font-weight: 600; }
+/* ───────── Page container ───────── */
+.page {
+  width: 210mm;
+  height: 297mm;            /* fixed — WeasyPrint will paginate cleanly */
+  padding: var(--pad);
+  background: #fff;
+  page-break-after: always;
+  page-break-inside: avoid;
+  position: relative;
+  overflow: hidden;
+}
+.page:last-of-type { page-break-after: auto; }
 
-.runfoot { margin-top: 9mm; padding-top: 5mm; border-top: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; font-family: var(--mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+/* Browser preview only — paper-on-desk look (does not affect PDF) */
+@media screen {
+  body { background: #54565a; padding: 8mm 0; }
+  .page { margin: 0 auto 8mm; box-shadow: 0 4px 24px rgba(0,0,0,.28); }
+}
+
+/* ───────── Running header ───────── */
+.runhead {
+  width: 100%;
+  padding-bottom: 6mm;
+  margin-bottom: 7mm;
+  border-bottom: 1.5px solid var(--ink);
+}
+.runhead td.lo { vertical-align: middle; }
+.runhead td.lo img { height: 22px; display: block; }
+.runhead td.me {
+  vertical-align: middle;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: .04em;
+  line-height: 1.45;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.runhead td.me b { color: var(--ink); font-weight: 600; }
+
+/* ───────── Running footer ───────── */
+.runfoot {
+  position: absolute;
+  bottom: 8mm;
+  left: var(--pad);
+  right: var(--pad);
+  border-top: 1px solid var(--line);
+  padding-top: 4mm;
+  font-family: var(--mono);
+  font-size: 7.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.runfoot td.l { text-align: left; }
+.runfoot td.c { text-align: center; }
+.runfoot td.r { text-align: right; }
 .runfoot b { color: var(--slate); font-weight: 600; }
 .runfoot .dot { color: var(--red); }
 
-.eyebrow { font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--red); display: flex; align-items: center; gap: 8px; }
-.eyebrow::before { content: ""; width: 16px; height: 2px; background: var(--red); display: inline-block; }
-.sec-title { font-family: var(--head); font-weight: 800; font-size: 23px; letter-spacing: -.015em; line-height: 1.08; margin: 9px 0 0; color: var(--ink); }
-.sec-sub { font-size: 10.5px; line-height: 1.5; color: var(--slate); margin: 7px 0 0; max-width: 150mm; }
-.block { margin-top: 9mm; }
+/* ───────── Section heads ───────── */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--red);
+  padding-left: 22px;
+  position: relative;
+  margin-bottom: 6px;
+}
+.eyebrow::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 50%;
+  margin-top: -1px;
+  width: 16px; height: 2px;
+  background: var(--red);
+}
+.sec-title {
+  font-family: var(--head);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -.015em;
+  line-height: 1.1;
+  margin: 0;
+  color: var(--ink);
+}
+.sec-sub {
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--slate);
+  margin: 6px 0 0;
+}
+.block { margin-top: 7mm; }
 .block:first-child { margin-top: 0; }
 
-.minihead { font-family: var(--head); font-weight: 700; font-size: 12.5px; letter-spacing: -.01em; color: var(--ink); display: flex; align-items: baseline; gap: 8px; margin: 0 0 9px; }
-.minihead .idx { font-family: var(--mono); font-size: 9px; color: var(--red); font-weight: 600; }
-.minihead .note { margin-left: auto; font-family: var(--mono); font-size: 8px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 400; }
+.minihead {
+  font-family: var(--head);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+  margin: 0 0 7px;
+  width: 100%;
+}
+.minihead td.idx {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  color: var(--red);
+  font-weight: 600;
+  padding-right: 8px;
+  width: 1%;
+  white-space: nowrap;
+  vertical-align: baseline;
+}
+.minihead td.note {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 7.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 400;
+  vertical-align: baseline;
+}
 
-.delta { font-family: var(--mono); font-weight: 600; font-size: 10px; display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
-.delta.up   { color: var(--pos); }
-.delta.down { color: var(--neg); }
-.delta.flat { color: var(--muted); }
-.delta.up::before   { content: "\25B2"; font-size: 9px; line-height: 1; }
-.delta.down::before { content: "\25BC"; font-size: 9px; line-height: 1; }
-.delta.flat::before { content: "\2013"; font-size: 9px; line-height: 1; }
-
-.tag { display: inline-block; font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; }
+/* ───────── Tags ───────── */
+.tag {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 2px;
+}
 .tag.good { background: var(--pos-tint); color: var(--pos); }
 .tag.warn { background: #FCF1E2; color: #C77B12; }
 .tag.bad  { background: var(--neg-tint); color: var(--neg); }
 
-.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); }
-.kpi { padding: 11px 13px 13px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.kpi:nth-child(4n) { border-right: none; }
-.kpi:nth-last-child(-n+4) { border-bottom: none; }
-.kpi__label { font-family: var(--mono); font-size: 8px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.kpi__val { font-family: var(--mono); font-weight: 600; font-size: 23px; letter-spacing: -.02em; color: var(--ink); margin: 7px 0 4px; line-height: 1; }
-.kpi__val .u { font-size: 12px; color: var(--faint); margin-left: 1px; }
-.kpi__foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.kpi__prev { font-family: var(--mono); font-size: 8px; color: var(--faint); }
+/* ───────── KPI scorecard (TABLE, not grid) ───────── */
+table.kpi-grid {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  table-layout: fixed;
+}
+table.kpi-grid td {
+  padding: 10px 12px 12px;
+  border-right: 1px solid var(--line);
+  vertical-align: top;
+  width: 25%;
+}
+table.kpi-grid td:last-child { border-right: none; }
+.kpi__label {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 500;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.kpi__val {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 22px;
+  letter-spacing: -.02em;
+  color: var(--ink);
+  margin: 6px 0 4px;
+  line-height: 1;
+}
+.kpi__val .u { font-size: 11px; color: var(--faint); margin-left: 1px; }
+.kpi__prev {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--faint);
+}
 
-.tbl { width: 100%; border-collapse: collapse; font-size: 10px; }
-.tbl th { font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 10px 7px; border-bottom: 1.5px solid var(--ink); }
-.tbl td { padding: 7.5px 10px; border-bottom: 1px solid var(--line-2); color: var(--slate); vertical-align: middle; }
+/* ───────── Data tables ───────── */
+.tbl { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+.tbl th {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 0 8px 6px;
+  border-bottom: 1.5px solid var(--ink);
+}
+.tbl td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line-2);
+  color: var(--slate);
+  vertical-align: middle;
+}
 .tbl tr:last-child td { border-bottom: none; }
 .tbl .num { font-family: var(--mono); text-align: right; color: var(--ink); }
 .tbl .kw { font-weight: 600; color: var(--ink); }
-.tbl .url { font-family: var(--mono); font-size: 9px; color: var(--slate); }
-.tbl tbody tr:nth-child(even) { background: var(--panel-2); }
+.tbl .url { font-family: var(--mono); font-size: 8.5px; color: var(--slate); }
+.tbl .ctr { text-align: center; }
 
-.panel { background: var(--panel); border: 1px solid var(--line); padding: 13px 15px; }
-.panel--ink { background: var(--ink); border-color: var(--ink); }
-.cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
-.cols-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 6mm; }
+/* ───────── Panels ───────── */
+.panel { background: var(--panel); border: 1px solid var(--line); padding: 11px 14px; }
+.panel--ink { background: var(--ink); border-color: var(--ink); color: #fff; }
 
-.stat-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
-.stat__v { font-family: var(--mono); font-weight: 600; font-size: 19px; color: var(--ink); letter-spacing: -.02em; }
-.stat__l { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 3px; }
+/* 2- and 3-col layouts via tables */
+table.cols { width: 100%; border-collapse: separate; border-spacing: 6mm 0; table-layout: fixed; }
+table.cols td { vertical-align: top; padding: 0; }
+table.cols.cols-2 td { width: 50%; }
+table.cols.cols-3 td { width: 33.33%; }
+
+/* ───────── Stat-row inside dark panel ───────── */
+table.stat-row {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+table.stat-row td { padding: 0; vertical-align: top; width: 25%; padding-right: 12px; }
+table.stat-row td:last-child { padding-right: 0; }
+.stat__v {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 18px;
+  color: var(--ink);
+  letter-spacing: -.02em;
+}
+.stat__l {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+  margin-top: 3px;
+}
 .panel--ink .stat__v { color: #fff; }
 .panel--ink .stat__l { color: var(--faint); }
 
-.cover { padding: 0; justify-content: stretch; background: var(--ink); color: #fff; }
-.cover__inner { flex: 1; display: flex; flex-direction: column; padding: 22mm var(--pad) 18mm; position: relative; overflow: hidden; }
-.cover__top { display: flex; align-items: center; justify-content: space-between; position: relative; z-index: 2; }
-.cover__logo { height: 30px; filter: brightness(0) invert(1); }
-.cover__tag { font-family: var(--mono); font-size: 8.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); }
-.cover__mid { margin-top: auto; position: relative; z-index: 2; }
-.cover__kicker { font-family: var(--mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--red); display: flex; align-items: center; gap: 9px; }
-.cover__kicker::before { content:""; width: 26px; height: 2px; background: var(--red); }
-.cover__title { font-family: var(--head); font-weight: 800; font-size: 50px; line-height: .98; letter-spacing: -.025em; margin: 18px 0 0; }
+/* ───────── COVER ───────── */
+.page.cover { padding: 0; background: var(--ink); color: #fff; }
+.cover__inner { padding: 22mm var(--pad) 14mm; min-height: 270mm; position: relative; }
+.cover__top { width: 100%; }
+.cover__top td.lg img { height: 28px; filter: brightness(0) invert(1); display: block; }
+.cover__top td.tg {
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--faint);
+  vertical-align: middle;
+}
+.cover__mid { margin-top: 80mm; }
+.cover__kicker {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--red);
+  padding-left: 36px;
+  position: relative;
+  margin-bottom: 16px;
+}
+.cover__kicker::before {
+  content: "";
+  position: absolute; left: 0; top: 50%;
+  margin-top: -1px;
+  width: 26px; height: 2px;
+  background: var(--red);
+}
+.cover__title {
+  font-family: var(--head);
+  font-weight: 800;
+  font-size: 50px;
+  line-height: 1;
+  letter-spacing: -.025em;
+  margin: 0;
+}
 .cover__title em { color: var(--red); font-style: normal; }
-.cover__client { font-family: var(--head); font-weight: 500; font-size: 17px; color: #DEDFE2; margin: 20px 0 0; }
-.cover__rule { height: 1px; background: rgba(255,255,255,.16); margin: 24px 0; }
-.cover__facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; position: relative; z-index: 2; }
-.cover__fact .l { font-family: var(--mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
-.cover__fact .v { font-family: var(--mono); font-size: 13px; font-weight: 600; color: #fff; margin-top: 5px; }
-.cover__ghost { position: absolute; right: -78mm; top: 50%; transform: translateY(-50%); width: 200mm; height: 200mm; opacity: .07; z-index: 1; -webkit-mask-image: radial-gradient(circle at 50% 50%, #000 30%, transparent 68%); mask-image: radial-gradient(circle at 50% 50%, #000 30%, transparent 68%); }
-.cover__foot { display: flex; justify-content: space-between; align-items: center; padding: 9mm var(--pad); border-top: 1px solid rgba(255,255,255,.14); font-family: var(--mono); font-size: 8px; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); position: relative; z-index: 2; }
+.cover__client {
+  font-family: var(--head);
+  font-weight: 500;
+  font-size: 15px;
+  color: #DEDFE2;
+  margin: 18px 0 0;
+  line-height: 1.4;
+}
+.cover__rule { height: 1px; background: rgba(255,255,255,.16); margin: 22px 0; }
+table.cover__facts {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 14px 14px;
+  table-layout: fixed;
+}
+table.cover__facts td { vertical-align: top; padding: 0; width: 33.33%; }
+.cf-l { font-family: var(--mono); font-size: 8px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.cf-v { font-family: var(--mono); font-size: 11.5px; font-weight: 600; color: #fff; margin-top: 4px; }
+.cover__foot {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  padding: 8mm var(--pad);
+  border-top: 1px solid rgba(255,255,255,.14);
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--faint);
+  width: 100%;
+}
+.cover__foot td.l { text-align: left; }
+.cover__foot td.r { text-align: right; }
 
-.src-note { font-family: var(--mono); font-size: 8px; color: var(--faint); letter-spacing: .03em; margin-top: 7px; }
+/* ───────── Source note ───────── */
+.src-note {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  color: var(--faint);
+  letter-spacing: .03em;
+  margin-top: 6px;
+}
 
-.sla { display: flex; flex-direction: column; gap: 0; }
-.sla__row { display: grid; grid-template-columns: 64px 1fr 76px 58px; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
-.sla__row:last-child { border-bottom: none; }
-.sla__p { display: flex; flex-direction: column; gap: 2px; }
-.sla__p b { font-family: var(--mono); font-weight: 600; font-size: 11px; color: var(--ink); }
+/* ───────── SLA bars ───────── */
+table.sla { width: 100%; border-collapse: collapse; }
+table.sla td { padding: 9px 0; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+table.sla tr:last-child td { border-bottom: none; }
+.sla__p b { font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--ink); display: block; }
 .sla__p small { font-family: var(--mono); font-size: 7.5px; color: var(--muted); letter-spacing: .03em; }
-.sla__track { height: 8px; background: var(--line-2); border-radius: 4px; overflow: hidden; display: flex; }
-.sla__met { height: 100%; background: var(--pos); }
-.sla__breach { height: 100%; background: var(--neg); }
-.sla__counts { font-family: var(--mono); font-size: 9px; color: var(--slate); text-align: right; }
+.sla__track-wrap { padding: 0 12px; }
+.sla__track {
+  height: 7px;
+  background: var(--line-2);
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+.sla__met { position: absolute; top: 0; left: 0; height: 100%; background: var(--pos); }
+.sla__breach { position: absolute; top: 0; height: 100%; background: var(--neg); }
+.sla__counts { font-family: var(--mono); font-size: 8.5px; color: var(--slate); text-align: right; white-space: nowrap; padding-right: 8px; }
 .sla__counts b { color: var(--ink); }
-.sla__pct { font-family: var(--mono); font-weight: 600; font-size: 13px; text-align: right; letter-spacing: -.01em; }
+.sla__pct { font-family: var(--mono); font-weight: 600; font-size: 12.5px; text-align: right; letter-spacing: -.01em; white-space: nowrap; }
 .sla__pct.ok { color: var(--pos); }
 .sla__pct.warn { color: #C77B12; }
 
-.change-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--line); }
-.change-cell { padding: 12px 13px; border-right: 1px solid var(--line); }
-.change-cell:last-child { border-right: none; }
-.change-cell .v { font-family: var(--mono); font-weight: 600; font-size: 24px; color: var(--ink); letter-spacing: -.02em; }
-.change-cell .l { font-family: var(--mono); font-size: 8px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 5px; line-height: 1.4; }
-.change-cell .bar { height: 3px; background: var(--red); margin-top: 9px; border-radius: 2px; }
+/* ───────── Change-log 4-cell grid (TABLE) ───────── */
+table.change-grid {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--line);
+  table-layout: fixed;
+}
+table.change-grid td {
+  padding: 11px 12px;
+  border-right: 1px solid var(--line);
+  vertical-align: top;
+  width: 25%;
+}
+table.change-grid td:last-child { border-right: none; }
+.cg__v { font-family: var(--mono); font-weight: 600; font-size: 22px; color: var(--ink); letter-spacing: -.02em; line-height: 1; }
+.cg__l { font-family: var(--mono); font-size: 7.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+.cg__bar { height: 3px; background: var(--red); margin-top: 8px; }
 
-.matrix { width: 100%; border-collapse: collapse; font-size: 10px; }
-.matrix th { font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); padding: 0 8px 8px; text-align: center; border-bottom: 1.5px solid var(--ink); }
-.matrix th.sev-h { text-align: left; }
-.matrix td { padding: 0; border-bottom: 1px solid var(--line-2); text-align: center; }
-.matrix tr:last-child td { border-bottom: none; }
-.matrix .sev { text-align: left; padding: 11px 8px; font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--ink); display: flex; align-items: center; gap: 7px; }
-.sev-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+/* ───────── VAPT matrix ───────── */
+table.matrix { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+table.matrix th {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 0 6px 7px;
+  text-align: center;
+  border-bottom: 1.5px solid var(--ink);
+}
+table.matrix th.sev-h { text-align: left; }
+table.matrix td {
+  padding: 10px 6px;
+  border-bottom: 1px solid var(--line-2);
+  text-align: center;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 11.5px;
+}
+table.matrix tr:last-child td { border-bottom: none; }
+table.matrix td.sev { text-align: left; }
+.sev-row { font-family: var(--mono); font-weight: 600; font-size: 10px; color: var(--ink); white-space: nowrap; }
+.sev-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 .sev-dot.crit { background: var(--red); }
 .sev-dot.high { background: #E8721C; }
 .sev-dot.med  { background: #D6A21A; }
 .sev-dot.low  { background: var(--faint); }
-.cell { display: flex; align-items: center; justify-content: center; height: 38px; font-family: var(--mono); font-weight: 600; font-size: 12px; }
-.cell.z { color: var(--faint); font-weight: 400; }
-.matrix td.total { background: var(--panel); }
-.matrix td.total .cell { color: var(--ink); }
-.matrix tfoot td { border-top: 1.5px solid var(--ink); border-bottom: none; }
-.matrix tfoot .cell { font-size: 11px; color: var(--slate); }
+table.matrix td.total { background: var(--panel); }
+.matrix .z { color: var(--faint); font-weight: 400; }
+table.matrix tfoot td { border-top: 1.5px solid var(--ink); border-bottom: none; color: var(--slate); }
+table.matrix tfoot td.total { color: var(--ink); }
 
-.scan { width: 100%; border-collapse: collapse; font-size: 10px; }
-.scan th { font-family: var(--mono); font-size: 8px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 0 9px 7px; border-bottom: 1.5px solid var(--ink); }
-.scan th.r, .scan td.r { text-align: right; }
-.scan td { padding: 9px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
-.scan tr:last-child td { border-bottom: none; }
-.scan .sname { font-weight: 600; color: var(--ink); font-size: 10.5px; }
-.scan .sname small { display: block; font-family: var(--mono); font-size: 8px; color: var(--muted); font-weight: 400; margin-top: 2px; letter-spacing: .02em; }
-.scan .num { font-family: var(--mono); font-weight: 600; color: var(--ink); }
-.scan .vbar { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
-.scan .vbar .track { width: 54px; height: 5px; background: var(--line-2); border-radius: 3px; overflow: hidden; }
-.scan .vbar .track > span { display: block; height: 100%; background: var(--pos); border-radius: 3px; }
-.scan tfoot td { border-top: 1.5px solid var(--ink); border-bottom: none; padding-top: 9px; font-weight: 600; color: var(--ink); }
-.scan tfoot .num { color: var(--ink); }
+/* ───────── Scanner table ───────── */
+table.scan { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+table.scan th {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: left;
+  padding: 0 8px 6px;
+  border-bottom: 1.5px solid var(--ink);
+}
+table.scan th.r, table.scan td.r { text-align: right; }
+table.scan td { padding: 8px; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+table.scan tr:last-child td { border-bottom: none; }
+.sname { font-weight: 600; color: var(--ink); font-size: 10px; }
+.sname small { display: block; font-family: var(--mono); font-size: 7.5px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+table.scan .num { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+table.scan tfoot td { border-top: 1.5px solid var(--ink); border-bottom: none; padding-top: 8px; font-weight: 600; color: var(--ink); }
 
-.badge-new { font-family: var(--mono); font-size: 7.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--red); padding: 2px 7px; border-radius: 3px; vertical-align: middle; }
+.badge-new {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--red);
+  padding: 2px 7px;
+  border-radius: 2px;
+}
 
-.rec { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); align-items: start; }
-.rec:last-child { border-bottom: none; }
+/* ───────── Recommendations ───────── */
+table.recs { width: 100%; border-collapse: collapse; }
+table.recs td {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+table.recs tr:last-child td { border-bottom: none; }
 .rec__t { font-family: var(--head); font-weight: 700; font-size: 11px; color: var(--ink); margin: 0 0 3px; }
 .rec__d { font-size: 9.5px; line-height: 1.5; color: var(--slate); margin: 0; }
 .rec__d .site { font-family: var(--mono); font-size: 9px; color: var(--red-dark); }
-.rec__meta { text-align: right; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; }
-.prio { font-family: var(--mono); font-size: 7.5px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 3px 7px; border-radius: 3px; white-space: nowrap; }
+.prio {
+  font-family: var(--mono);
+  font-size: 7.5px;
+  font-weight: 600;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+  display: inline-block;
+}
 .prio.hi  { background: var(--red-tint); color: var(--red-dark); }
 .prio.med { background: #FCF1E2; color: #C77B12; }
 .prio.low { background: var(--panel); color: var(--muted); }
 
-.wp { display: flex; flex-direction: column; gap: 0; }
-.wp__row { display: grid; grid-template-columns: 18px 1fr auto auto; gap: 11px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line-2); }
-.wp__row:last-child { border-bottom: none; }
-.wp__ico { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; font-weight: 700; color: #fff; }
+/* ───────── WordPress findings ───────── */
+table.wp { width: 100%; border-collapse: collapse; }
+table.wp td { padding: 9px 0; border-bottom: 1px solid var(--line-2); vertical-align: middle; }
+table.wp tr:last-child td { border-bottom: none; }
+.wp__ico {
+  display: inline-block;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 15px;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  vertical-align: middle;
+}
 .wp__ico.ok { background: var(--pos); }
 .wp__ico.warn { background: #C77B12; }
 .wp__ico.bad { background: var(--neg); }
-.wp__name { font-size: 10px; font-weight: 500; color: var(--ink); }
-.wp__name small { display: block; font-family: var(--mono); font-size: 8px; color: var(--muted); font-weight: 400; margin-top: 1px; }
-.wp__count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink); }
+.wp__name { font-size: 10px; font-weight: 500; color: var(--ink); padding-left: 10px; }
+.wp__name small { display: block; font-family: var(--mono); font-size: 7.5px; color: var(--muted); font-weight: 400; margin-top: 1px; }
+.wp__count { font-family: var(--mono); font-size: 10px; font-weight: 600; color: var(--ink); text-align: right; white-space: nowrap; padding: 0 10px; }
 
-.up { display: flex; flex-direction: column; gap: 13px; }
-.up__top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+/* ───────── Uptime rows ───────── */
+table.up { width: 100%; border-collapse: collapse; }
+table.up td { padding: 9px 0; vertical-align: middle; }
 .up__name { font-size: 10px; font-weight: 600; color: var(--ink); }
 .up__name small { font-family: var(--mono); font-weight: 400; color: var(--muted); font-size: 8px; margin-left: 6px; }
-.up__meta { font-family: var(--mono); font-size: 9.5px; color: var(--slate); }
+.up__meta { font-family: var(--mono); font-size: 9px; color: var(--slate); text-align: right; white-space: nowrap; }
 .up__meta b { color: var(--ink); font-weight: 600; }
-.up__track { height: 7px; background: var(--line-2); border-radius: 4px; overflow: hidden; }
-.up__fill { height: 100%; background: var(--pos); border-radius: 4px; }
+.up__track {
+  height: 6px;
+  background: var(--line-2);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-top: 5px;
+}
+.up__fill { height: 100%; background: var(--pos); }
 
-.sumcard { border: 1px solid var(--line); padding: 12px 14px; }
+/* ───────── Summary cards ───────── */
+.sumcard { border: 1px solid var(--line); padding: 11px 13px; height: 100%; }
 .sumcard h4 { font-family: var(--head); font-weight: 700; font-size: 11px; margin: 0 0 6px; color: var(--ink); }
 .sumcard p { font-size: 9.5px; line-height: 1.55; color: var(--slate); margin: 0; }
-
-@media print {
-  html, body { background: #fff; }
-  .page { margin: 0; box-shadow: none; width: 210mm; min-height: 297mm; }
-  .page + .page { page-break-before: always; }
-  @page { size: A4; margin: 0; }
-}
 </style>
 </head>
 <body>
 
-{# Pre-compute booleans for which sections render per report type
-   (per the Build Guide section scope matrix). Monthly = superset. #}
+{# Section visibility per Build Guide scope matrix #}
 {% set is_daily   = (report_type == 'daily') %}
 {% set is_weekly  = (report_type == 'weekly') %}
 {% set is_monthly = (report_type == 'monthly') %}
 {% set show_sla         = (is_weekly or is_monthly) %}
-{% set show_vapt_matrix = (is_weekly or is_monthly) and (vapt_summary and vapt_summary.overall_total > 0) %}
+{% set show_vapt_matrix = (is_weekly or is_monthly) and vapt_summary and vapt_summary.overall_total > 0 %}
 {% set show_changes     = (change_entries | length > 0) or is_weekly or is_monthly %}
-{% set show_scanner     = scanner_summary and (scanner_summary.runs_in_period | sum(attribute='runs') > 0 or scanner_summary.new_in_period_by_sev.values() | sum > 0) %}
+{% set show_scanner     = scanner_summary and (scanner_summary.runs_in_period | sum(attribute='runs') > 0) %}
 {% set show_recs        = (recommendations | length > 0) and (is_weekly or is_monthly) %}
 {% set show_wp          = (wp_findings | length > 0) %}
 {% set show_summary     = is_monthly %}
-{% set total_pages = 2 + (1 if show_sla else 0) + (1 if show_changes or show_vapt_matrix else 0) + (1 if show_scanner or show_recs else 0) + (1 if show_wp or show_summary else 0) %}
 
-{# ---------------- COVER ---------------- #}
-<section class="page cover">
+{% set total_pages = 2 %}
+{% if show_sla %}{% set total_pages = total_pages + 1 %}{% endif %}
+{% if show_changes or show_vapt_matrix %}{% set total_pages = total_pages + 1 %}{% endif %}
+{% if show_scanner or show_recs %}{% set total_pages = total_pages + 1 %}{% endif %}
+{% if show_wp or show_summary %}{% set total_pages = total_pages + 1 %}{% endif %}
+
+{# ───────── COVER PAGE ───────── #}
+<div class="page cover">
   <div class="cover__inner">
-    {% if LOGO_ICON_DATA_URI %}<img class="cover__ghost" src="{{ LOGO_ICON_DATA_URI }}" alt="" />{% endif %}
-    <div class="cover__top">
-      {% if LOGO_WORDMARK_DATA_URI %}<img class="cover__logo" src="{{ LOGO_WORDMARK_DATA_URI }}" alt="Redot Global" />{% endif %}
-      <div class="cover__tag">Security &amp; Uptime Platform</div>
-    </div>
+    <table class="cover__top"><tr>
+      <td class="lg">{% if LOGO_WORDMARK_DATA_URI %}<img src="{{ LOGO_WORDMARK_DATA_URI }}" alt="Redot Global" />{% endif %}</td>
+      <td class="tg">Security &amp; Uptime Platform</td>
+    </tr></table>
+
     <div class="cover__mid">
       <div class="cover__kicker">{{ report_type | title }} Report</div>
-      <h1 class="cover__title">{{ period_label.split(' ')[0] if period_label else 'Report' }}{% if period_label and period_label.split(' ') | length > 1 %} <em>{{ period_label.split(' ', 1)[1] }}</em>{% endif %}</h1>
+      {% set parts = period_label.split(' ', 1) if period_label else ['Report', ''] %}
+      <h1 class="cover__title">{{ parts[0] }}{% if parts | length > 1 and parts[1] %} <em>{{ parts[1] }}</em>{% endif %}</h1>
       <p class="cover__client">Mosque-Madrasah-Wakaf Shared Services<br/>Security &amp; Uptime Platform</p>
       <div class="cover__rule"></div>
-      <div class="cover__facts">
-        <div class="cover__fact"><div class="l">Reporting Period</div><div class="v">{{ period_label }}</div></div>
-        <div class="cover__fact"><div class="l">Generated</div><div class="v">{{ generated_at }}</div></div>
-        <div class="cover__fact"><div class="l">Prepared For</div><div class="v">tm@sharedservices.sg</div></div>
-        <div class="cover__fact"><div class="l">Sites Monitored</div><div class="v">{{ stats.zones }} {{ 'property' if stats.zones == 1 else 'properties' }}</div></div>
-        <div class="cover__fact"><div class="l">Coverage</div><div class="v">Contract-grade · SLA</div></div>
-        <div class="cover__fact"><div class="l">Document</div><div class="v">mmwss-{{ report_type }}-{{ stamp }}.pdf</div></div>
-      </div>
-    </div>
-  </div>
-  <div class="cover__foot">
-    <span>Redot Global · MMWSS</span>
-    <span>Confidential — for the named recipient only</span>
-  </div>
-</section>
-
-{# Macro for the running header (page 2+) #}
-{% macro page_header() -%}
-  <header class="runhead">
-    {% if LOGO_WORDMARK_DATA_URI %}<img src="{{ LOGO_WORDMARK_DATA_URI }}" alt="Redot Global" />{% endif %}
-    <div class="runhead__meta">
-      <b>MMWSS · {{ report_type | title }} Report</b><br/>{{ period_label }} · Security &amp; Uptime
-    </div>
-  </header>
-{%- endmacro %}
-
-{% macro page_footer(pn) -%}
-  <footer class="runfoot">
-    <span><b>Redot Global</b> <span class="dot">·</span> MMWSS</span>
-    <span>{{ report_type | title }} · {{ period_label }}</span>
-    <span>Page <b>{{ '%02d' % pn }}</b> / {{ '%02d' % total_pages }}</span>
-  </footer>
-{%- endmacro %}
-
-{# ---------------- PAGE 2: KPI + PER-SITE ---------------- #}
-<section class="page">
-  {{ page_header() }}
-  <div class="page__body">
-    <div class="block">
-      <div class="eyebrow">Period Overview</div>
-      <h2 class="sec-title">Platform performance at a glance</h2>
-      <p class="sec-sub">Aggregate traffic, threat mitigation and reliability across all {{ stats.zones }} MMWSS properties for the period. All times SGT (UTC+8).</p>
-    </div>
-
-    <div class="block">
-      <div class="kpi-grid">
-        <div class="kpi">
-          <div class="kpi__label">Total Requests</div>
-          <div class="kpi__val">{% if stats.requests >= 1000000 %}{{ '%.1f' % (stats.requests / 1000000) }}<span class="u">M</span>{% elif stats.requests >= 1000 %}{{ '%.1f' % (stats.requests / 1000) }}<span class="u">K</span>{% else %}{{ stats.requests }}{% endif %}</div>
-          <div class="kpi__foot"><span class="kpi__prev">across {{ stats.zones }} sites</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi__label">Threats Blocked</div>
-          <div class="kpi__val">{% if stats.threats >= 1000000 %}{{ '%.2f' % (stats.threats / 1000000) }}<span class="u">M</span>{% elif stats.threats >= 1000 %}{{ '%.1f' % (stats.threats / 1000) }}<span class="u">K</span>{% else %}{{ stats.threats }}{% endif %}</div>
-          <div class="kpi__foot"><span class="kpi__prev">{{ '%.2f' % (stats.threats / stats.requests * 100) if stats.requests else '0.00' }}% of traffic</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi__label">Cache Hit Ratio</div>
-          <div class="kpi__val">{{ '%.1f' % stats.hit_ratio }}<span class="u">%</span></div>
-          <div class="kpi__foot"><span class="kpi__prev">edge offload</span></div>
-        </div>
-        <div class="kpi">
-          <div class="kpi__label">Incidents</div>
-          <div class="kpi__val">{{ incidents | length }}</div>
-          <div class="kpi__foot"><span class="kpi__prev">{{ stats.incidents_open }} currently open</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <div class="minihead"><span class="idx">01</span> Per-site summary <span class="note">{{ sites | length }} properties · Cloudflare</span></div>
-      <table class="tbl">
-        <thead>
-          <tr>
-            <th style="width:28%">Site</th>
-            <th class="num">Requests</th>
-            <th class="num">Uptime</th>
-            <th class="num">Hit %</th>
-            <th class="num">Threats</th>
-            <th style="text-align:center">SSL</th>
-            <th style="text-align:center">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for s in sites %}
-          <tr>
-            <td><span class="kw">{{ s.name }}</span>{% if s.plan %}<br/><span class="url">{{ s.plan }} plan</span>{% endif %}</td>
-            <td class="num">{% if s.requests >= 1000000 %}{{ '%.1f' % (s.requests / 1000000) }}M{% elif s.requests >= 1000 %}{{ '%.1f' % (s.requests / 1000) }}K{% else %}{{ s.requests }}{% endif %}</td>
-            <td class="num">{% if s.uptime_pct is not none %}{{ '%.2f' % s.uptime_pct }}%{% else %}—{% endif %}</td>
-            <td class="num">{% if s.hit_ratio is not none %}{{ '%.0f' % s.hit_ratio }}%{% else %}—{% endif %}</td>
-            <td class="num">{% if s.threats >= 1000 %}{{ '%.0f' % (s.threats / 1000) }}K{% else %}{{ s.threats }}{% endif %}</td>
-            <td style="text-align:center">{% if s.ssl_expiry %}<span class="tag good">A</span>{% else %}<span class="tag warn">—</span>{% endif %}</td>
-            <td style="text-align:center">{% if s.uptime_pct is not none and s.uptime_pct >= 99.9 %}<span class="tag good">Healthy</span>{% elif s.uptime_pct is not none and s.uptime_pct >= 99.0 %}<span class="tag warn">Review</span>{% else %}<span class="tag bad">Action</span>{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
+      <table class="cover__facts">
+        <tr>
+          <td><div class="cf-l">Reporting Period</div><div class="cf-v">{{ period_label }}</div></td>
+          <td><div class="cf-l">Generated</div><div class="cf-v">{{ generated_at }}</div></td>
+          <td><div class="cf-l">Prepared For</div><div class="cf-v">tm@sharedservices.sg</div></td>
+        </tr>
+        <tr>
+          <td><div class="cf-l">Sites Monitored</div><div class="cf-v">{{ stats.zones }} {{ 'property' if stats.zones == 1 else 'properties' }}</div></td>
+          <td><div class="cf-l">Coverage</div><div class="cf-v">Contract-grade · SLA</div></td>
+          <td><div class="cf-l">Document</div><div class="cf-v">mmwss-{{ report_type }}-{{ stamp }}.pdf</div></td>
+        </tr>
       </table>
-      <p class="src-note">SSL status reflects active certificate pack. FW Blocked counts via Cloudflare WAF + rate-limit + managed rules during the period.</p>
-    </div>
-
-    <div class="block">
-      <div class="panel panel--ink">
-        <div class="stat-row">
-          {% set total_checks = uptime_sites | sum(attribute='total') %}
-          {% set total_ok = uptime_sites | sum(attribute='ok') %}
-          <div class="stat"><div class="stat__v">{{ '%.2f' % (total_ok / total_checks * 100) if total_checks else '0.00' }}%</div><div class="stat__l">Fleet uptime</div></div>
-          <div class="stat"><div class="stat__v">{{ '%.0f' % stats.hit_ratio }}%</div><div class="stat__l">Cache offload</div></div>
-          <div class="stat"><div class="stat__v">{{ '%.2f' % (stats.threats / stats.requests * 100) if stats.requests else '0.00' }}%</div><div class="stat__l">Threat rate</div></div>
-          <div class="stat"><div class="stat__v">{{ stats.incidents_open }}</div><div class="stat__l">Open incidents</div></div>
-        </div>
-      </div>
     </div>
   </div>
-  {{ page_footer(2) }}
-</section>
+  <table class="cover__foot"><tr>
+    <td class="l">Redot Global · MMWSS</td>
+    <td class="r">Confidential — for the named recipient only</td>
+  </tr></table>
+</div>
 
-{# ---------------- PAGE 3: SLA + UPTIME PER SITE ---------------- #}
+{# Reusable header / footer macros #}
+{% macro head() -%}
+<table class="runhead"><tr>
+  <td class="lo">{% if LOGO_WORDMARK_DATA_URI %}<img src="{{ LOGO_WORDMARK_DATA_URI }}" alt="Redot Global" />{% endif %}</td>
+  <td class="me"><b>MMWSS · {{ report_type | title }} Report</b><br/>{{ period_label }} · Security &amp; Uptime</td>
+</tr></table>
+{%- endmacro %}
+
+{% macro foot(pn) -%}
+<table class="runfoot"><tr>
+  <td class="l"><b>Redot Global</b> <span class="dot">·</span> MMWSS</td>
+  <td class="c">{{ report_type | title }} · {{ period_label }}</td>
+  <td class="r">Page <b>{{ '%02d' % pn }}</b> / {{ '%02d' % total_pages }}</td>
+</tr></table>
+{%- endmacro %}
+
+{# ───────── PAGE 2 — KPI + PER-SITE ───────── #}
+<div class="page">
+  {{ head() }}
+
+  <div class="block">
+    <div class="eyebrow">Period Overview</div>
+    <h2 class="sec-title">Platform performance at a glance</h2>
+    <p class="sec-sub">Aggregate traffic, threat mitigation and reliability across all {{ stats.zones }} MMWSS properties for the period. All times SGT (UTC+8).</p>
+  </div>
+
+  <div class="block">
+    <table class="kpi-grid"><tr>
+      <td>
+        <div class="kpi__label">Total Requests</div>
+        <div class="kpi__val">{% if stats.requests >= 1000000 %}{{ '%.1f' % (stats.requests / 1000000) }}<span class="u">M</span>{% elif stats.requests >= 1000 %}{{ '%.1f' % (stats.requests / 1000) }}<span class="u">K</span>{% else %}{{ stats.requests }}{% endif %}</div>
+        <div class="kpi__prev">across {{ stats.zones }} sites</div>
+      </td>
+      <td>
+        <div class="kpi__label">Threats Blocked</div>
+        <div class="kpi__val">{% if stats.threats >= 1000000 %}{{ '%.2f' % (stats.threats / 1000000) }}<span class="u">M</span>{% elif stats.threats >= 1000 %}{{ '%.1f' % (stats.threats / 1000) }}<span class="u">K</span>{% else %}{{ stats.threats }}{% endif %}</div>
+        <div class="kpi__prev">{{ '%.2f' % (stats.threats / stats.requests * 100) if stats.requests else '0.00' }}% of traffic</div>
+      </td>
+      <td>
+        <div class="kpi__label">Cache Hit Ratio</div>
+        <div class="kpi__val">{{ '%.1f' % stats.hit_ratio }}<span class="u">%</span></div>
+        <div class="kpi__prev">edge offload</div>
+      </td>
+      <td>
+        <div class="kpi__label">Incidents</div>
+        <div class="kpi__val">{{ incidents | length }}</div>
+        <div class="kpi__prev">{{ stats.incidents_open }} currently open</div>
+      </td>
+    </tr></table>
+  </div>
+
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">01</td>
+      <td>Per-site summary</td>
+      <td class="note">{{ sites | length }} properties · Cloudflare</td>
+    </tr></table>
+    <table class="tbl">
+      <thead>
+        <tr>
+          <th style="width:25%">Site</th>
+          <th class="num">Requests</th>
+          <th class="num">Uptime</th>
+          <th class="num">Hit %</th>
+          <th class="num">Threats</th>
+          <th class="ctr">SSL</th>
+          <th class="ctr">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in sites %}
+        <tr>
+          <td><span class="kw">{{ s.name }}</span>{% if s.plan %}<br/><span class="url">{{ s.plan }} plan</span>{% endif %}</td>
+          <td class="num">{% if s.requests >= 1000000 %}{{ '%.1f' % (s.requests / 1000000) }}M{% elif s.requests >= 1000 %}{{ '%.1f' % (s.requests / 1000) }}K{% else %}{{ s.requests }}{% endif %}</td>
+          <td class="num">{% if s.uptime_pct is not none %}{{ '%.2f' % s.uptime_pct }}%{% else %}—{% endif %}</td>
+          <td class="num">{% if s.hit_ratio is not none %}{{ '%.0f' % s.hit_ratio }}%{% else %}—{% endif %}</td>
+          <td class="num">{% if s.threats >= 1000 %}{{ '%.0f' % (s.threats / 1000) }}K{% else %}{{ s.threats }}{% endif %}</td>
+          <td class="ctr">{% if s.ssl_expiry %}<span class="tag good">A</span>{% else %}<span class="tag warn">—</span>{% endif %}</td>
+          <td class="ctr">{% if s.uptime_pct is not none and s.uptime_pct >= 99.9 %}<span class="tag good">Healthy</span>{% elif s.uptime_pct is not none and s.uptime_pct >= 99.0 %}<span class="tag warn">Review</span>{% else %}<span class="tag bad">Action</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="src-note">SSL status reflects active certificate pack. FW Blocked counts via Cloudflare WAF + rate-limit + managed rules during the period.</p>
+  </div>
+
+  <div class="block">
+    <div class="panel panel--ink">
+      <table class="stat-row"><tr>
+        {% set tot_checks = uptime_sites | sum(attribute='total') %}
+        {% set tot_ok = uptime_sites | sum(attribute='ok') %}
+        <td><div class="stat__v">{{ '%.2f' % (tot_ok / tot_checks * 100) if tot_checks else '0.00' }}%</div><div class="stat__l">Fleet uptime</div></td>
+        <td><div class="stat__v">{{ '%.0f' % stats.hit_ratio }}%</div><div class="stat__l">Cache offload</div></td>
+        <td><div class="stat__v">{{ '%.2f' % (stats.threats / stats.requests * 100) if stats.requests else '0.00' }}%</div><div class="stat__l">Threat rate</div></td>
+        <td><div class="stat__v">{{ stats.incidents_open }}</div><div class="stat__l">Open incidents</div></td>
+      </tr></table>
+    </div>
+  </div>
+
+  {{ foot(2) }}
+</div>
+
+{# ───────── PAGE 3 — SLA + UPTIME ───────── #}
 {% if show_sla %}
-<section class="page">
-  {{ page_header() }}
-  <div class="page__body">
-    <div class="block">
-      <div class="minihead"><span class="idx">02</span> SLA performance <span class="note">Resolution targets · met vs breached</span></div>
-      <div class="cols-2">
-        <div>
-          <div class="sla">
-            {% set p_labels = {'p1': ('P1', 'Critical · ' + (sla_summary.p1.target_resolution_secs | secs_to_human)),
-                                'p2': ('P2', 'High · ' + (sla_summary.p2.target_resolution_secs | secs_to_human)),
-                                'p3': ('P3', 'Medium · ' + (sla_summary.p3.target_resolution_secs | secs_to_human)),
-                                'p4': ('P4', 'Low · ' + (sla_summary.p4.target_resolution_secs | secs_to_human))} %}
-            {% for p in ['p1','p2','p3','p4'] %}
-              {% set row = sla_summary[p] %}
-              {% set met = row.resolution_met %}
-              {% set total = row.resolution_met + row.resolution_breached %}
-              {% set pct = (met / total * 100) if total else 100.0 %}
-              <div class="sla__row">
-                <div class="sla__p"><b>{{ p_labels[p][0] }}</b><small>{{ p_labels[p][1] }}</small></div>
-                <div class="sla__track"><div class="sla__met" style="width:{{ '%.1f' % pct }}%"></div><div class="sla__breach" style="width:{{ '%.1f' % (100 - pct) }}%"></div></div>
-                <div class="sla__counts"><b>{{ met }}</b>/{{ total }} met</div>
-                <div class="sla__pct {{ 'ok' if pct >= 95 else 'warn' }}">{{ '%.1f' % pct }}%</div>
-              </div>
-            {% endfor %}
-          </div>
-        </div>
-        <div>
-          {% set total_all = (sla_summary.p1.resolution_met + sla_summary.p1.resolution_breached + sla_summary.p2.resolution_met + sla_summary.p2.resolution_breached + sla_summary.p3.resolution_met + sla_summary.p3.resolution_breached + sla_summary.p4.resolution_met + sla_summary.p4.resolution_breached) %}
-          {% set met_all = (sla_summary.p1.resolution_met + sla_summary.p2.resolution_met + sla_summary.p3.resolution_met + sla_summary.p4.resolution_met) %}
-          {% set overall = (met_all / total_all * 100) if total_all else 100.0 %}
-          <div class="panel" style="height:100%; display:flex; flex-direction:column; justify-content:center;">
-            <div class="kpi__label" style="margin-bottom:6px">Overall SLA compliance</div>
-            <div style="font-family:var(--mono); font-weight:600; font-size:46px; letter-spacing:-.03em; color:var(--ink); line-height:1;">{{ '%.1f' % overall }}<span style="font-size:22px;color:var(--faint)">%</span></div>
-            <div style="margin-top:10px; font-family:var(--mono); font-size:10px; color:var(--muted);">{{ met_all }} of {{ total_all }} tickets resolved within target · contract floor 95%</div>
-            <p class="sec-sub" style="margin-top:14px; font-size:9.5px;">SLA windows measured from ticket open to resolution-confirmed. Targets follow the MMWSS service schedule.</p>
-          </div>
-        </div>
-      </div>
-      <p class="src-note">Resolution-window compliance. Response-time compliance is tracked separately in the platform audit trail.</p>
-    </div>
+<div class="page">
+  {{ head() }}
 
-    <div class="block">
-      <div class="minihead"><span class="idx">03</span> Uptime per site <span class="note">% availability · 60-second cadence</span></div>
-      <div class="up">
-        {% for u in uptime_sites %}
-        <div class="up__row">
-          <div class="up__top">
-            <div class="up__name">{{ u.name }}</div>
-            <div class="up__meta">{% if u.pct is not none %}<b>{{ '%.2f' % u.pct }}%</b>{% else %}<b>—</b>{% endif %}{% if u.avg_latency %} · {{ u.avg_latency | round | int }} ms{% endif %} · {{ u.ok or 0 }}/{{ u.total or 0 }} probes</div>
-          </div>
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">02</td>
+      <td>SLA performance</td>
+      <td class="note">Resolution targets · met vs breached</td>
+    </tr></table>
+
+    <table class="cols cols-2"><tr>
+      <td>
+        <table class="sla">
+          {% set p_meta = {'p1': ('P1', 'Critical · ' + (sla_summary.p1.target_resolution_secs | secs_to_human)),
+                            'p2': ('P2', 'High · ' + (sla_summary.p2.target_resolution_secs | secs_to_human)),
+                            'p3': ('P3', 'Medium · ' + (sla_summary.p3.target_resolution_secs | secs_to_human)),
+                            'p4': ('P4', 'Low · ' + (sla_summary.p4.target_resolution_secs | secs_to_human))} %}
+          {% for p in ['p1','p2','p3','p4'] %}
+            {% set r = sla_summary[p] %}
+            {% set met = r.resolution_met %}
+            {% set total = r.resolution_met + r.resolution_breached %}
+            {% set pct = (met / total * 100) if total else 100.0 %}
+            <tr>
+              <td style="width:62px" class="sla__p"><b>{{ p_meta[p][0] }}</b><small>{{ p_meta[p][1] }}</small></td>
+              <td class="sla__track-wrap">
+                <div class="sla__track">
+                  <div class="sla__met" style="left:0; width:{{ '%.1f' % pct }}%"></div>
+                  {% if pct < 100 %}<div class="sla__breach" style="left:{{ '%.1f' % pct }}%; width:{{ '%.1f' % (100 - pct) }}%"></div>{% endif %}
+                </div>
+              </td>
+              <td style="width:78px" class="sla__counts"><b>{{ met }}</b>/{{ total }} met</td>
+              <td style="width:54px" class="sla__pct {{ 'ok' if pct >= 95 else 'warn' }}">{{ '%.1f' % pct }}%</td>
+            </tr>
+          {% endfor %}
+        </table>
+      </td>
+      <td>
+        {% set total_all = (sla_summary.p1.resolution_met + sla_summary.p1.resolution_breached + sla_summary.p2.resolution_met + sla_summary.p2.resolution_breached + sla_summary.p3.resolution_met + sla_summary.p3.resolution_breached + sla_summary.p4.resolution_met + sla_summary.p4.resolution_breached) %}
+        {% set met_all = (sla_summary.p1.resolution_met + sla_summary.p2.resolution_met + sla_summary.p3.resolution_met + sla_summary.p4.resolution_met) %}
+        {% set overall = (met_all / total_all * 100) if total_all else 100.0 %}
+        <div class="panel">
+          <div class="kpi__label" style="margin-bottom:6px">Overall SLA compliance</div>
+          <div style="font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:42px; letter-spacing:-.03em; color:#18191B; line-height:1;">{{ '%.1f' % overall }}<span style="font-size:20px;color:#B9BCC2">%</span></div>
+          <div style="margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:9.5px; color:#8A8D93;">{{ met_all }} of {{ total_all }} tickets resolved within target · floor 95%</div>
+          <p style="margin-top:12px; font-size:9.5px; color:#44464A; line-height:1.5;">SLA windows measured from ticket open to resolution-confirmed. Targets follow the MMWSS service schedule.</p>
+        </div>
+      </td>
+    </tr></table>
+    <p class="src-note">Resolution-window compliance. Response-time compliance is tracked separately in the platform audit trail.</p>
+  </div>
+
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">03</td>
+      <td>Uptime per site</td>
+      <td class="note">% availability · 60-second cadence</td>
+    </tr></table>
+    <table class="up">
+      {% for u in uptime_sites %}
+      <tr>
+        <td>
+          <div class="up__name">{{ u.name }}</div>
           <div class="up__track"><div class="up__fill" style="width:{{ '%.2f' % (u.pct or 0) }}%"></div></div>
-        </div>
-        {% endfor %}
-      </div>
-      <p class="src-note">Availability from external synthetic checks at 60-second cadence. Downtime excludes scheduled maintenance windows.</p>
-    </div>
+        </td>
+        <td style="width:140px" class="up__meta">{% if u.pct is not none %}<b>{{ '%.2f' % u.pct }}%</b>{% else %}<b>—</b>{% endif %}{% if u.avg_latency %} · {{ u.avg_latency | round | int }} ms{% endif %}<br/><span style="font-size:8px">{{ u.ok or 0 }}/{{ u.total or 0 }} probes</span></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="src-note">Availability from external synthetic checks at 60-second cadence. Downtime excludes scheduled maintenance windows.</p>
   </div>
-  {{ page_footer(3) }}
-</section>
+
+  {{ foot(3) }}
+</div>
 {% endif %}
 
-{# ---------------- PAGE: CHANGES + VAPT MATRIX ---------------- #}
+{# ───────── PAGE 4 — CHANGES + VAPT MATRIX ───────── #}
 {% if show_changes or show_vapt_matrix %}
-<section class="page">
-  {{ page_header() }}
-  <div class="page__body">
-    {% if show_changes %}
-    <div class="block">
-      <div class="minihead"><span class="idx">04</span> Patches &amp; system changes <span class="note">Change-log roll-up · {{ change_entries | length }} entries</span></div>
-      {% set cat_security = (change_by_cat.get('plugin_update', {}).get('count', 0) + change_by_cat.get('vapt_remediation', {}).get('count', 0)) %}
-      {% set cat_plugins  = (change_by_cat.get('plugin_update', {}).get('count', 0) + change_by_cat.get('theme_update', {}).get('count', 0)) %}
-      {% set cat_core     = change_by_cat.get('core_update', {}).get('count', 0) %}
-      {% set cat_infra    = (change_by_cat.get('cf_setting', {}).get('count', 0) + change_by_cat.get('cf_firewall_rule', {}).get('count', 0) + change_by_cat.get('cf_dns', {}).get('count', 0) + change_by_cat.get('server_config', {}).get('count', 0)) %}
-      {% set cat_max = [cat_security, cat_plugins, cat_core, cat_infra] | max %}
-      <div class="change-grid">
-        <div class="change-cell"><div class="v">{{ cat_security }}</div><div class="l">Security<br/>patches</div><div class="bar" style="width:{{ (cat_security / cat_max * 100) if cat_max else 0 }}%"></div></div>
-        <div class="change-cell"><div class="v">{{ cat_plugins }}</div><div class="l">Plugin &amp; theme<br/>updates</div><div class="bar" style="width:{{ (cat_plugins / cat_max * 100) if cat_max else 0 }}%"></div></div>
-        <div class="change-cell"><div class="v">{{ cat_core }}</div><div class="l">Core / CMS<br/>updates</div><div class="bar" style="width:{{ (cat_core / cat_max * 100) if cat_max else 0 }}%"></div></div>
-        <div class="change-cell"><div class="v">{{ cat_infra }}</div><div class="l">Infra &amp; config<br/>changes</div><div class="bar" style="width:{{ (cat_infra / cat_max * 100) if cat_max else 0 }}%"></div></div>
-      </div>
-      {% if change_entries %}
-      <table class="tbl" style="margin-top:13px">
-        <thead>
-          <tr><th style="width:14%">Date</th><th style="width:20%">Category</th><th>Change</th><th style="width:20%">Site(s)</th><th style="text-align:center; width:13%">Result</th></tr>
-        </thead>
-        <tbody>
-          {% for e in change_entries[:5] %}
-          <tr>
-            <td class="url">{{ e.executed_at.strftime('%d %b') if e.executed_at else '—' }}</td>
-            <td>{{ e.category | replace('_', ' ') | title }}</td>
-            <td>{{ e.title | truncate(70) }}</td>
-            <td class="url">{{ e.zone_name or 'all sites' }}</td>
-            <td style="text-align:center">{% if e.rolled_back %}<span class="tag bad">Rolled back</span>{% elif e.test_result == 'passed' %}<span class="tag good">Applied</span>{% elif e.test_result == 'failed' %}<span class="tag bad">Failed</span>{% else %}<span class="tag warn">Applied</span>{% endif %}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
-      <p class="src-note">Showing 5 most recent entries of {{ change_entries | length }}. Full change log in the platform audit trail.</p>
-    </div>
-    {% endif %}
+<div class="page">
+  {{ head() }}
 
-    {% if show_vapt_matrix %}
-    <div class="block">
-      <div class="minihead"><span class="idx">05</span> VAPT remediation status <span class="note">Severity × workflow · {{ vapt_summary.overall_total }} findings tracked</span></div>
-      <table class="matrix">
-        <thead>
-          <tr>
-            <th class="sev-h">Severity</th>
-            <th>Open</th>
-            <th>In Progress</th>
-            <th>Remediated</th>
-            <th>Verified</th>
-            <th>Accepted Risk</th>
-            <th class="total">Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for sev, dotcls in [('critical','crit'),('high','high'),('medium','med'),('low','low')] %}
-          {% set v = vapt_summary.by_severity[sev] %}
-          {% if v.total > 0 %}
-          <tr>
-            <td><span class="sev"><span class="sev-dot {{ dotcls }}"></span>{{ sev | title }}</span></td>
-            <td><div class="cell {{ 'z' if v.open == 0 else '' }}">{{ v.open }}</div></td>
-            <td><div class="cell {{ 'z' if v.in_progress == 0 else '' }}">{{ v.in_progress }}</div></td>
-            <td><div class="cell {{ 'z' if v.remediated == 0 else '' }}">{{ v.remediated }}</div></td>
-            <td><div class="cell {{ 'z' if v.verified == 0 else '' }}">{{ v.verified }}</div></td>
-            <td><div class="cell {{ 'z' if v.accepted_risk == 0 else '' }}">{{ v.accepted_risk }}</div></td>
-            <td class="total"><div class="cell">{{ v.total }}</div></td>
-          </tr>
-          {% endif %}
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          {% set t_open = vapt_summary.by_severity['critical'].open + vapt_summary.by_severity['high'].open + vapt_summary.by_severity['medium'].open + vapt_summary.by_severity['low'].open %}
-          {% set t_ip = vapt_summary.by_severity['critical'].in_progress + vapt_summary.by_severity['high'].in_progress + vapt_summary.by_severity['medium'].in_progress + vapt_summary.by_severity['low'].in_progress %}
-          {% set t_rem = vapt_summary.by_severity['critical'].remediated + vapt_summary.by_severity['high'].remediated + vapt_summary.by_severity['medium'].remediated + vapt_summary.by_severity['low'].remediated %}
-          {% set t_ver = vapt_summary.by_severity['critical'].verified + vapt_summary.by_severity['high'].verified + vapt_summary.by_severity['medium'].verified + vapt_summary.by_severity['low'].verified %}
-          {% set t_ar  = vapt_summary.by_severity['critical'].accepted_risk + vapt_summary.by_severity['high'].accepted_risk + vapt_summary.by_severity['medium'].accepted_risk + vapt_summary.by_severity['low'].accepted_risk %}
-          <tr>
-            <td><span class="sev" style="color:var(--muted)">All severities</span></td>
-            <td><div class="cell">{{ t_open }}</div></td>
-            <td><div class="cell">{{ t_ip }}</div></td>
-            <td><div class="cell">{{ t_rem }}</div></td>
-            <td><div class="cell">{{ t_ver }}</div></td>
-            <td><div class="cell">{{ t_ar }}</div></td>
-            <td class="total"><div class="cell" style="color:var(--ink)">{{ vapt_summary.overall_total }}</div></td>
-          </tr>
-        </tfoot>
-      </table>
-      <p class="src-note">Workflow columns reflect current finding state. Auto-verification re-runs remediated findings before they're marked verified.</p>
-    </div>
+  {% if show_changes %}
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">04</td>
+      <td>Patches &amp; system changes</td>
+      <td class="note">{{ change_entries | length }} entries</td>
+    </tr></table>
+    {% set cat_security = (change_by_cat.get('plugin_update', {}).get('count', 0) + change_by_cat.get('vapt_remediation', {}).get('count', 0)) %}
+    {% set cat_plugins  = (change_by_cat.get('plugin_update', {}).get('count', 0) + change_by_cat.get('theme_update', {}).get('count', 0)) %}
+    {% set cat_core     = change_by_cat.get('core_update', {}).get('count', 0) %}
+    {% set cat_infra    = (change_by_cat.get('cf_setting', {}).get('count', 0) + change_by_cat.get('cf_firewall_rule', {}).get('count', 0) + change_by_cat.get('cf_dns', {}).get('count', 0) + change_by_cat.get('server_config', {}).get('count', 0)) %}
+    {% set cat_max = [cat_security, cat_plugins, cat_core, cat_infra] | max %}
+    <table class="change-grid"><tr>
+      <td><div class="cg__v">{{ cat_security }}</div><div class="cg__l">Security<br/>patches</div><div class="cg__bar" style="width:{{ (cat_security / cat_max * 100) if cat_max else 0 }}%"></div></td>
+      <td><div class="cg__v">{{ cat_plugins }}</div><div class="cg__l">Plugin &amp; theme<br/>updates</div><div class="cg__bar" style="width:{{ (cat_plugins / cat_max * 100) if cat_max else 0 }}%"></div></td>
+      <td><div class="cg__v">{{ cat_core }}</div><div class="cg__l">Core / CMS<br/>updates</div><div class="cg__bar" style="width:{{ (cat_core / cat_max * 100) if cat_max else 0 }}%"></div></td>
+      <td><div class="cg__v">{{ cat_infra }}</div><div class="cg__l">Infra &amp; config<br/>changes</div><div class="cg__bar" style="width:{{ (cat_infra / cat_max * 100) if cat_max else 0 }}%"></div></td>
+    </tr></table>
+    {% if change_entries %}
+    <table class="tbl" style="margin-top:10px">
+      <thead>
+        <tr>
+          <th style="width:13%">Date</th>
+          <th style="width:18%">Category</th>
+          <th>Change</th>
+          <th style="width:18%">Site(s)</th>
+          <th class="ctr" style="width:12%">Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in change_entries[:5] %}
+        <tr>
+          <td class="url">{{ e.executed_at.strftime('%d %b') if e.executed_at else '—' }}</td>
+          <td>{{ e.category | replace('_', ' ') | title }}</td>
+          <td>{{ e.title | truncate(60) }}</td>
+          <td class="url">{{ e.zone_name or 'all sites' }}</td>
+          <td class="ctr">{% if e.rolled_back %}<span class="tag bad">Rolled back</span>{% elif e.test_result == 'failed' %}<span class="tag bad">Failed</span>{% else %}<span class="tag good">Applied</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
     {% endif %}
+    <p class="src-note">Showing 5 most recent entries of {{ change_entries | length }}. Full change log in the platform audit trail.</p>
   </div>
-  {{ page_footer(4 if show_sla else 3) }}
-</section>
+  {% endif %}
+
+  {% if show_vapt_matrix %}
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">05</td>
+      <td>VAPT remediation status</td>
+      <td class="note">{{ vapt_summary.overall_total }} findings tracked</td>
+    </tr></table>
+    <table class="matrix">
+      <colgroup>
+        <col style="width:22%"><col><col><col><col><col><col style="width:14%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th class="sev-h">Severity</th>
+          <th>Open</th>
+          <th>In Progress</th>
+          <th>Remediated</th>
+          <th>Verified</th>
+          <th>Accepted Risk</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sev, dotcls in [('critical','crit'),('high','high'),('medium','med'),('low','low')] %}
+        {% set v = vapt_summary.by_severity[sev] %}
+        {% if v.total > 0 %}
+        <tr>
+          <td class="sev"><span class="sev-row"><span class="sev-dot {{ dotcls }}"></span>{{ sev | title }}</span></td>
+          <td class="{{ 'z' if v.open == 0 else '' }}">{{ v.open }}</td>
+          <td class="{{ 'z' if v.in_progress == 0 else '' }}">{{ v.in_progress }}</td>
+          <td class="{{ 'z' if v.remediated == 0 else '' }}">{{ v.remediated }}</td>
+          <td class="{{ 'z' if v.verified == 0 else '' }}">{{ v.verified }}</td>
+          <td class="{{ 'z' if v.accepted_risk == 0 else '' }}">{{ v.accepted_risk }}</td>
+          <td class="total">{{ v.total }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        {% set t_open = vapt_summary.by_severity['critical'].open + vapt_summary.by_severity['high'].open + vapt_summary.by_severity['medium'].open + vapt_summary.by_severity['low'].open %}
+        {% set t_ip = vapt_summary.by_severity['critical'].in_progress + vapt_summary.by_severity['high'].in_progress + vapt_summary.by_severity['medium'].in_progress + vapt_summary.by_severity['low'].in_progress %}
+        {% set t_rem = vapt_summary.by_severity['critical'].remediated + vapt_summary.by_severity['high'].remediated + vapt_summary.by_severity['medium'].remediated + vapt_summary.by_severity['low'].remediated %}
+        {% set t_ver = vapt_summary.by_severity['critical'].verified + vapt_summary.by_severity['high'].verified + vapt_summary.by_severity['medium'].verified + vapt_summary.by_severity['low'].verified %}
+        {% set t_ar  = vapt_summary.by_severity['critical'].accepted_risk + vapt_summary.by_severity['high'].accepted_risk + vapt_summary.by_severity['medium'].accepted_risk + vapt_summary.by_severity['low'].accepted_risk %}
+        <tr>
+          <td class="sev"><span class="sev-row" style="color:#8A8D93">All severities</span></td>
+          <td>{{ t_open }}</td>
+          <td>{{ t_ip }}</td>
+          <td>{{ t_rem }}</td>
+          <td>{{ t_ver }}</td>
+          <td>{{ t_ar }}</td>
+          <td class="total">{{ vapt_summary.overall_total }}</td>
+        </tr>
+      </tfoot>
+    </table>
+    <p class="src-note">Workflow columns reflect current finding state. Auto-verification re-runs remediated findings before they're marked verified.</p>
+  </div>
+  {% endif %}
+
+  {{ foot(3 + (1 if show_sla else 0)) }}
+</div>
 {% endif %}
 
-{# ---------------- PAGE: SCANNER + RECS ---------------- #}
+{# ───────── PAGE — SCANNER + RECS ───────── #}
 {% if show_scanner or show_recs %}
-<section class="page">
-  {{ page_header() }}
-  <div class="page__body">
-    {% if show_scanner %}
-    <div class="block">
-      <div class="minihead"><span class="idx">06</span> Internal VAPT scanner activity <span class="badge-new">New</span> <span class="note">Phase 1 scanners · auto-verified</span></div>
-      <table class="scan">
-        <thead>
-          <tr><th>Scanner</th><th class="r">Runs</th><th class="r">Findings</th><th class="r">New</th><th class="r" style="width:30%">Resolved</th></tr>
-        </thead>
-        <tbody>
-          {% for s in scanner_summary.runs_in_period %}
-          {% if s.runs > 0 or s.findings_total > 0 %}
-          {% set rate = (s.findings_resolved / s.findings_total * 100) if s.findings_total else 0 %}
-          <tr>
-            <td><span class="sname">{{ s.scanner | title }} scanner<small>{{ s.runs_ok }}/{{ s.runs }} runs ok{% if s.runs_failed > 0 %} · {{ s.runs_failed }} failed{% endif %}</small></span></td>
-            <td class="r num">{{ s.runs }}</td>
-            <td class="r num">{{ s.findings_total }}</td>
-            <td class="r num">{{ s.findings_new }}</td>
-            <td class="r"><div class="vbar"><span class="num" style="font-size:9px;color:var(--muted)">{{ s.findings_resolved }}</span><div class="track"><span style="width:{{ '%.0f' % rate }}%"></span></div></div></td>
-          </tr>
-          {% endif %}
-          {% endfor %}
-        </tbody>
-        <tfoot>
-          {% set tot_runs = scanner_summary.runs_in_period | sum(attribute='runs') %}
-          {% set tot_findings = scanner_summary.runs_in_period | sum(attribute='findings_total') %}
-          {% set tot_new = scanner_summary.runs_in_period | sum(attribute='findings_new') %}
-          {% set tot_resolved = scanner_summary.runs_in_period | sum(attribute='findings_resolved') %}
-          <tr><td>Phase 1 total</td><td class="r num">{{ tot_runs }}</td><td class="r num">{{ tot_findings }}</td><td class="r num">{{ tot_new }}</td><td class="r num">{{ tot_resolved }}</td></tr>
-        </tfoot>
-      </table>
-      <p class="src-note">Auto-verification re-runs each finding after remediation. Auto-verified this period: {{ scanner_summary.auto_verified_in_period }}. Surface delta: +{{ scanner_summary.surface_changes.new_hosts }} hosts · −{{ scanner_summary.surface_changes.lost_hosts }} retired.</p>
-    </div>
-    {% endif %}
+<div class="page">
+  {{ head() }}
 
-    {% if show_recs %}
-    <div class="block">
-      <div class="minihead"><span class="idx">07</span> Cloudflare recommendations <span class="note">Rules-based · prioritised</span></div>
-      <div>
-        {% for r in recommendations[:6] %}
-        <div class="rec">
-          <div>
-            <h4 class="rec__t">{{ r.title }}</h4>
-            <p class="rec__d"><span class="site">{{ r.site }}</span> — {{ r.body }}</p>
-          </div>
-          <div class="rec__meta"><span class="prio {{ 'hi' if r.severity == 'critical' else ('med' if r.severity == 'warn' else 'low') }}">{{ 'High' if r.severity == 'critical' else ('Medium' if r.severity == 'warn' else 'Low') }}</span></div>
-        </div>
+  {% if show_scanner %}
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">06</td>
+      <td>Internal VAPT scanner activity <span class="badge-new">NEW</span></td>
+      <td class="note">Phase 1 scanners · auto-verified</td>
+    </tr></table>
+    <table class="scan">
+      <thead>
+        <tr><th>Scanner</th><th class="r">Runs</th><th class="r">Findings</th><th class="r">New</th><th class="r">Resolved</th></tr>
+      </thead>
+      <tbody>
+        {% for s in scanner_summary.runs_in_period %}
+        {% if s.runs > 0 or s.findings_total > 0 %}
+        <tr>
+          <td><span class="sname">{{ s.scanner | title }} scanner<small>{{ s.runs_ok }}/{{ s.runs }} runs ok{% if s.runs_failed > 0 %} · {{ s.runs_failed }} failed{% endif %}</small></span></td>
+          <td class="r num">{{ s.runs }}</td>
+          <td class="r num">{{ s.findings_total }}</td>
+          <td class="r num">{{ s.findings_new }}</td>
+          <td class="r num">{{ s.findings_resolved }}</td>
+        </tr>
+        {% endif %}
         {% endfor %}
-      </div>
-    </div>
-    {% endif %}
+      </tbody>
+      <tfoot>
+        {% set tot_runs = scanner_summary.runs_in_period | sum(attribute='runs') %}
+        {% set tot_findings = scanner_summary.runs_in_period | sum(attribute='findings_total') %}
+        {% set tot_new = scanner_summary.runs_in_period | sum(attribute='findings_new') %}
+        {% set tot_resolved = scanner_summary.runs_in_period | sum(attribute='findings_resolved') %}
+        <tr><td>Phase 1 total</td><td class="r num">{{ tot_runs }}</td><td class="r num">{{ tot_findings }}</td><td class="r num">{{ tot_new }}</td><td class="r num">{{ tot_resolved }}</td></tr>
+      </tfoot>
+    </table>
+    <p class="src-note">Auto-verification re-runs each finding after remediation. Auto-verified this period: {{ scanner_summary.auto_verified_in_period }}. Surface delta: +{{ scanner_summary.surface_changes.new_hosts }} hosts · −{{ scanner_summary.surface_changes.lost_hosts }} retired.</p>
   </div>
-  {{ page_footer((4 if show_sla else 3) + (1 if show_changes or show_vapt_matrix else 0)) }}
-</section>
+  {% endif %}
+
+  {% if show_recs %}
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">07</td>
+      <td>Cloudflare recommendations</td>
+      <td class="note">Rules-based · prioritised</td>
+    </tr></table>
+    <table class="recs">
+      {% for r in recommendations[:6] %}
+      <tr>
+        <td>
+          <div class="rec__t">{{ r.title }}</div>
+          <p class="rec__d"><span class="site">{{ r.site }}</span> — {{ r.body }}</p>
+        </td>
+        <td style="width:80px; text-align:right; vertical-align:top">
+          <span class="prio {{ 'hi' if r.severity == 'critical' else ('med' if r.severity == 'warn' else 'low') }}">{{ 'High' if r.severity == 'critical' else ('Medium' if r.severity == 'warn' else 'Low') }}</span>
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+  {% endif %}
+
+  {{ foot(3 + (1 if show_sla else 0) + (1 if show_changes or show_vapt_matrix else 0)) }}
+</div>
 {% endif %}
 
-{# ---------------- PAGE: WORDPRESS + SUMMARY ---------------- #}
+{# ───────── PAGE — WORDPRESS + SUMMARY ───────── #}
 {% if show_wp or show_summary %}
-<section class="page">
-  {{ page_header() }}
-  <div class="page__body">
-    {% if show_wp %}
-    <div class="block">
-      <div class="minihead"><span class="idx">08</span> WordPress findings <span class="note">Synthetic-probe results · {{ stats.zones }} sites</span></div>
-      <div class="wp">
-        {% for f in wp_findings[:10] %}
-        <div class="wp__row">
-          <div class="wp__ico {{ 'bad' if f.severity == 'critical' else ('warn' if f.severity == 'warning' else 'ok') }}">{% if f.severity == 'critical' %}!{% elif f.severity == 'warning' %}!{% else %}&#10003;{% endif %}</div>
-          <div class="wp__name">{{ f.title }}<small>{{ f.zone_name }}{% if f.details %} · {{ f.details | truncate(80) }}{% endif %}</small></div>
-          <div class="wp__count">1</div>
-          <div><span class="tag {{ 'bad' if f.severity == 'critical' else ('warn' if f.severity == 'warning' else 'good') }}">{{ f.severity | title }}</span></div>
-        </div>
-        {% endfor %}
-      </div>
-      <p class="src-note">Probes are read-only and run weekly against production. Flagged items mirror into the VAPT remediation tracker.</p>
-    </div>
-    {% endif %}
+<div class="page">
+  {{ head() }}
 
-    {% if show_summary %}
-    <div class="block">
-      <div class="minihead"><span class="idx">09</span> Month in summary</div>
-      <div class="cols-2">
+  {% if show_wp %}
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">08</td>
+      <td>WordPress findings</td>
+      <td class="note">Synthetic-probe results · {{ stats.zones }} sites</td>
+    </tr></table>
+    <table class="wp">
+      {% for f in wp_findings[:10] %}
+      <tr>
+        <td style="width:20px"><span class="wp__ico {{ 'bad' if f.severity == 'critical' else ('warn' if f.severity == 'warning' else 'ok') }}">{% if f.severity == 'critical' %}!{% elif f.severity == 'warning' %}!{% else %}&#10003;{% endif %}</span></td>
+        <td><div class="wp__name">{{ f.title }}<small>{{ f.zone_name }}{% if f.details %} · {{ f.details | truncate(70) }}{% endif %}</small></div></td>
+        <td class="wp__count">1</td>
+        <td style="width:60px; text-align:right"><span class="tag {{ 'bad' if f.severity == 'critical' else ('warn' if f.severity == 'warning' else 'good') }}">{{ f.severity | title }}</span></td>
+      </tr>
+      {% endfor %}
+    </table>
+    <p class="src-note">Probes are read-only and run weekly against production. Flagged items mirror into the VAPT remediation tracker.</p>
+  </div>
+  {% endif %}
+
+  {% if show_summary %}
+  <div class="block">
+    <table class="minihead"><tr><td class="idx">09</td><td>Month in summary</td><td></td></tr></table>
+    <table class="cols cols-2"><tr>
+      <td>
         <div class="sumcard">
           <h4>What went well</h4>
           <p>Fleet uptime held at {{ '%.2f' % ((uptime_sites | sum(attribute='ok')) / (uptime_sites | sum(attribute='total')) * 100) if (uptime_sites | sum(attribute='total')) else '99.9' }}% against a 99.9% contract floor. {{ scanner_summary.auto_verified_in_period if scanner_summary else 0 }} findings auto-verified by internal scanners. {{ change_entries | length }} system changes recorded with full audit trail.</p>
         </div>
+      </td>
+      <td>
         <div class="sumcard">
           <h4>Focus for next period</h4>
           <p>{% if vapt_summary and vapt_summary.by_severity.critical.open + vapt_summary.by_severity.high.open > 0 %}Close the {{ vapt_summary.by_severity.critical.open + vapt_summary.by_severity.high.open }} open Critical/High VAPT finding(s){% else %}Maintain zero Critical/High VAPT backlog{% endif %}, action high-priority Cloudflare recommendations, and clear WordPress probe items.</p>
         </div>
-      </div>
-    </div>
-
-    <div class="block">
-      <div class="panel panel--ink">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:20px;">
-          <div>
-            <div class="kpi__label" style="color:var(--faint)">Reporting cadence</div>
-            <div style="font-family:var(--head); font-weight:700; font-size:14px; color:#fff; margin-top:6px;">Daily 07:00 · Weekly Mon 08:00 · Monthly 1st 09:00 SGT</div>
-          </div>
-          <div style="text-align:right; flex:none;">
-            <div class="kpi__label" style="color:var(--faint)">Document</div>
-            <div style="font-family:var(--mono); font-weight:600; font-size:12px; color:#fff; margin-top:6px;">mmwss-{{ report_type }}-{{ stamp }}.pdf</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
+      </td>
+    </tr></table>
   </div>
-  {{ page_footer(total_pages) }}
-</section>
+
+  <div class="block">
+    <div class="panel panel--ink">
+      <table style="width:100%"><tr>
+        <td>
+          <div class="kpi__label" style="color:#B9BCC2">Reporting cadence</div>
+          <div style="font-family:'Archivo', sans-serif; font-weight:700; font-size:13px; color:#fff; margin-top:6px;">Daily 07:00 · Weekly Mon 08:00 · Monthly 1st 09:00 SGT</div>
+        </td>
+        <td style="text-align:right; width:200px">
+          <div class="kpi__label" style="color:#B9BCC2">Document</div>
+          <div style="font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:11px; color:#fff; margin-top:6px;">mmwss-{{ report_type }}-{{ stamp }}.pdf</div>
+        </td>
+      </tr></table>
+    </div>
+  </div>
+  {% endif %}
+
+  {{ foot(total_pages) }}
+</div>
 {% endif %}
 
 </body>
