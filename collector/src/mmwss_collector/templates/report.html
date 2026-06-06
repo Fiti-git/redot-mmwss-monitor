@@ -238,11 +238,24 @@
 
 {% if recommendations %}
 <section>
-  <h2>Recommended actions</h2>
+  <h2>Cloudflare recommendations</h2>
   {% for r in recommendations %}
   <div class="rec {{ r.severity }}">
     <div class="rec-title">{{ r.site }} · {{ r.title }}</div>
     <div class="rec-body">{{ r.body }}</div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if wp_findings %}
+<section>
+  <h2>WordPress findings</h2>
+  {% set sev_map = {'critical': '', 'warning': 'warn', 'info': 'info'} %}
+  {% for f in wp_findings %}
+  <div class="rec {{ sev_map.get(f.severity, 'info') }}">
+    <div class="rec-title">{{ f.zone_name }} · {{ f.title }}{% if f.severity == 'critical' %} <span class="pill red" style="margin-left:6px">critical</span>{% elif f.severity == 'warning' %} <span class="pill amber" style="margin-left:6px">warning</span>{% endif %}</div>
+    <div class="rec-body">{{ f.details }}</div>
   </div>
   {% endfor %}
 </section>

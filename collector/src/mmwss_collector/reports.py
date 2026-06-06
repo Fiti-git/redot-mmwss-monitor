@@ -324,6 +324,56 @@ def _recommend(sites: list[dict]) -> list[Recommendation]:
 # ───────── main entry point ─────────
 
 
+_WP_TITLES = {
+    "wp_config_exposed":          "wp-config.php is publicly served",
+    "env_exposed":                ".env file is publicly served",
+    "install_script_accessible":  "WordPress installer is reachable",
+    "wp_admin_exposed":           "Admin dashboard is exposed",
+    "rest_users_enumerable":      "WP user list is publicly enumerable",
+    "xmlrpc_enabled":             "XML-RPC endpoint is enabled",
+    "wp_version_in_generator":    "WordPress version disclosed",
+    "readme_html_present":        "/readme.html present",
+    "home_5xx":                   "Home page returning 5xx",
+    "home_4xx":                   "Home page returning 4xx",
+    "home_unreachable":           "Home page unreachable",
+    "error_text_on_page":         "Error text visible on home page",
+    "backup_file_exposed":        "Backup or VCS file exposed",
+}
+
+
+def _wp_findings(conn) -> list[dict]:
+    rows = _qn(
+        conn,
+        """
+        WITH latest AS (
+            SELECT DISTINCT ON (zone_id) zone_id, is_wordpress, wp_version, findings_json
+            FROM mmwss.wp_checks ORDER BY zone_id, captured_at DESC
+        )
+        SELECT z.id AS zone_id, z.name, l.is_wordpress, l.wp_version, l.findings_json
+        FROM mmwss.zones z
+        JOIN latest l ON l.zone_id = z.id
+        WHERE z.status = 'active'
+        ORDER BY z.name
+        """,
+    )
+    out: list[dict] = []
+    for r in rows:
+        for bucket in ("exposures", "config", "health", "info"):
+            for f in (r["findings_json"] or {}).get(bucket, []):
+                check = f.get("check", "")
+                out.append({
+                    "zone_name": r["name"],
+                    "is_wordpress": r["is_wordpress"],
+                    "wp_version": r["wp_version"],
+                    "severity": f.get("severity", "info"),
+                    "title": _WP_TITLES.get(check, check.replace("_", " ").title()),
+                    "details": f.get("details", ""),
+                })
+    order = {"critical": 0, "warning": 1, "info": 2}
+    out.sort(key=lambda x: (order.get(x["severity"], 9), x["zone_name"]))
+    return out
+
+
 def generate_report(settings: Settings, conn, kind: str) -> int:
     """Render + persist + announce a report. Returns mmwss.reports.id."""
     start, end, period_label = _period_for(kind)
@@ -331,6 +381,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
     sites = _sites(conn, start, end)
     incidents = _incidents(conn, start, end)
     recommendations = _recommend(sites)
+    wp_findings = _wp_findings(conn)
 
     # Bar-chart data: only sites with >0 threats, scaled to max=100
     max_threats = max((s["threats"] for s in sites), default=0)
@@ -361,6 +412,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         "incidents": incidents,
         "recommendations": [{"site": r.site, "severity": r.severity, "title": r.title, "body": r.body}
                             for r in recommendations],
+        "wp_findings": wp_findings,
     }
 
     tmpl = _env().get_template("report.html")

@@ -319,13 +319,34 @@ def list_cf_tokens() -> list[dict]:
     )
 
 
+_TITLE_FOR_WP = {
+    "wp_config_exposed":          "wp-config.php is publicly served",
+    "env_exposed":                ".env file is publicly served",
+    "install_script_accessible":  "WordPress installer is reachable",
+    "wp_admin_exposed":           "Admin dashboard is exposed",
+    "rest_users_enumerable":      "WP user list is publicly enumerable",
+    "xmlrpc_enabled":             "XML-RPC endpoint is enabled",
+    "wp_version_in_generator":    "WordPress version disclosed",
+    "readme_html_present":        "/readme.html present",
+    "home_5xx":                   "Home page returning 5xx",
+    "home_4xx":                   "Home page returning 4xx",
+    "home_unreachable":           "Home page unreachable",
+    "error_text_on_page":         "Error text visible on home page",
+    "backup_file_exposed":        "Backup or VCS file exposed",
+}
+
+
 def all_recommendations() -> list[dict]:
-    """Run the rule engine across every active zone using each one's
-    latest snapshot. Returns a flat list of dicts, one per firing rule,
-    annotated with zone metadata so the template can render rows directly.
+    """Unified issue stream: Cloudflare recommendations + WordPress findings.
+
+    Each item is dict-shaped with: source ('cloudflare'|'wordpress'),
+    zone_id, zone_name, severity, title, body, rule_id. Sorted by
+    (severity, source, zone_name).
     """
     from . import recommendations as recs
-    rows = db.fetch_all(
+
+    # ─── Cloudflare rules ───
+    cf_rows = db.fetch_all(
         """
         WITH latest_snap AS (
             SELECT DISTINCT ON (zone_id) zone_id, settings_json, ssl_expiry,
@@ -341,23 +362,51 @@ def all_recommendations() -> list[dict]:
         """
     )
     out: list[dict] = []
-    for r in rows:
+    for r in cf_rows:
         for rec in recs.evaluate(
             name=r["name"], settings=r["settings_json"],
             ssl_expiry=r["ssl_expiry"], fw_rules_total=r["fw_rules_total"],
         ):
             out.append({
-                "zone_id": r["zone_id"], "zone_name": r["name"], "plan": r["plan"],
-                "severity": rec.severity, "title": rec.title, "body": rec.body,
-                "rule_id": rec.rule_id,
+                "source": "cloudflare", "zone_id": r["zone_id"], "zone_name": r["name"],
+                "plan": r["plan"], "severity": rec.severity,
+                "title": rec.title, "body": rec.body, "rule_id": rec.rule_id,
             })
+
+    # ─── WordPress findings ───
+    wp_rows = db.fetch_all(
+        """
+        WITH latest AS (
+            SELECT DISTINCT ON (zone_id) zone_id, captured_at, findings_json
+            FROM mmwss.wp_checks ORDER BY zone_id, captured_at DESC
+        )
+        SELECT z.id AS zone_id, z.name, l.findings_json, l.captured_at
+        FROM mmwss.zones z
+        JOIN latest l ON l.zone_id = z.id
+        WHERE z.status = 'active'
+        """
+    )
+    for r in wp_rows:
+        for bucket in ("exposures", "config", "health", "info"):
+            for f in (r["findings_json"] or {}).get(bucket, []):
+                check = f.get("check", "")
+                out.append({
+                    "source": "wordpress",
+                    "zone_id": r["zone_id"], "zone_name": r["name"], "plan": None,
+                    "severity": f.get("severity", "info"),
+                    "title": _TITLE_FOR_WP.get(check, check.replace("_", " ").title()),
+                    "body": f.get("details", ""),
+                    "rule_id": check,
+                })
+
     severity_order = {"critical": 0, "warning": 1, "info": 2}
-    out.sort(key=lambda r: (severity_order.get(r["severity"], 9), r["zone_name"]))
+    out.sort(key=lambda r: (severity_order.get(r["severity"], 9), r["source"], r["zone_name"]))
     return out
 
 
 def zone_recommendations(zone_id: int) -> list[dict]:
-    """Same as all_recommendations() but scoped to one zone."""
+    """Return CF recommendations for one zone (per-zone page also renders
+    the WP findings card separately, so we keep this query CF-only)."""
     from . import recommendations as recs
     snap = db.fetch_one(
         """
@@ -384,31 +433,56 @@ def zone_recommendations(zone_id: int) -> list[dict]:
     ]
 
 
+def _wp_score_deduction_for(zone_id: int) -> tuple[int, int, int, int]:
+    """Return (total_points, n_critical, n_warning, n_info) for one zone's
+    latest WP check. Weights mirror CF: critical 15, warning 7, info 2."""
+    weights = {"critical": 15, "warning": 7, "info": 2}
+    r = db.fetch_one(
+        "SELECT findings_json FROM mmwss.wp_checks WHERE zone_id = %s ORDER BY captured_at DESC LIMIT 1",
+        (zone_id,),
+    )
+    if not r:
+        return (0, 0, 0, 0)
+    f = r["findings_json"] or {}
+    crit = warn = info = 0
+    for bucket in ("exposures", "config", "health", "info"):
+        for it in f.get(bucket, []):
+            sev = it.get("severity")
+            if sev == "critical": crit += 1
+            elif sev == "warning": warn += 1
+            elif sev == "info": info += 1
+    total = crit * weights["critical"] + warn * weights["warning"] + info * weights["info"]
+    return (total, crit, warn, info)
+
+
 def zones_scored() -> list[dict]:
-    """Same shape as zones_with_status() but with an extra 'score' field
-    (0-100) and 'rec_count' / 'rec_critical' for the dashboard table.
+    """Like zones_with_status() but adds a security score (0-100) that
+    accounts for BOTH Cloudflare recommendations and WordPress findings.
     """
     from . import recommendations as recs
     base = zones_with_status()
     enriched = []
     for z in base:
-        items = recs.evaluate(
+        cf_items = recs.evaluate(
             name=z["name"],
             settings=z.get("settings_json") or {},
             ssl_expiry=z.get("ssl_expiry"),
             fw_rules_total=z.get("fw_rules_total"),
         )
-        score = recs.calculate_score(items)
+        cf_deduction = sum(r.weight for r in cf_items)
+        wp_deduction, wp_crit, wp_warn, wp_info = _wp_score_deduction_for(z["id"])
+        score = max(0, 100 - cf_deduction - wp_deduction)
         letter, color = recs.score_to_grade(score)
+        cf_crit = sum(1 for r in cf_items if r.severity == "critical")
+        cf_warn = sum(1 for r in cf_items if r.severity == "warning")
+        cf_info = sum(1 for r in cf_items if r.severity == "info")
         enriched.append({
             **z,
-            "score": score,
-            "grade": letter,
-            "grade_color": color,
-            "rec_count": len(items),
-            "rec_critical": sum(1 for r in items if r.severity == "critical"),
-            "rec_warning":  sum(1 for r in items if r.severity == "warning"),
-            "rec_info":     sum(1 for r in items if r.severity == "info"),
+            "score": score, "grade": letter, "grade_color": color,
+            "rec_count":    len(cf_items) + (wp_crit + wp_warn + wp_info),
+            "rec_critical": cf_crit + wp_crit,
+            "rec_warning":  cf_warn + wp_warn,
+            "rec_info":     cf_info + wp_info,
         })
     return enriched
 
