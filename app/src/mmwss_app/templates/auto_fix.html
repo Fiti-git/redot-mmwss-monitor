@@ -1,0 +1,211 @@
+{% extends "_app_shell.html" %}
+{% block title %}Auto-resolution — MMWSS{% endblock %}
+
+{% macro sev_chip(s) %}
+{% set cls = {'critical':'bg-danger-soft text-danger-dark','high':'bg-warn-soft text-warn-dark',
+              'medium':'bg-info-soft text-info-dark','low':'bg-surface-sunken text-ink-muted',
+              'info':'bg-surface-sunken text-ink-subtle'}.get(s, 'bg-surface-sunken text-ink-muted') %}
+<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded {{ cls }}">{{ s }}</span>
+{% endmacro %}
+
+{% macro status_chip(s) %}
+{% if s == 'pending_approval' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">pending</span>
+{% elif s == 'applied' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-ok-soft text-ok-dark">applied</span>
+{% elif s == 'failed' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">failed</span>
+{% elif s == 'rejected' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">rejected</span>
+{% elif s == 'applying' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-warn-soft text-warn-dark">applying…</span>
+{% else %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">{{ s }}</span>{% endif %}
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1500px]">
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <div class="text-[12px] text-ink-muted mb-1">
+        <a href="{{ base_path }}/scanners" class="hover:text-brand">Scanners</a> / Auto-resolution
+      </div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">Auto-resolution queue</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">
+        Mechanical CF fixes proposed by the platform for scanner findings. Every proposal requires admin approval — no autonomous changes.
+        Apply pushes the CF API call, records a change-log entry, marks the finding remediated, and the next scan verifies.
+      </p>
+    </div>
+    {% if user.role == 'admin' %}
+    <form method="post" action="{{ base_path }}/scanners/auto-fix/regenerate" class="inline">
+      <button class="h-10 px-3.5 bg-white border border-line text-ink-muted hover:text-ink font-semibold text-[12.5px] rounded-lg">
+        ↻ Regenerate proposals from current open findings
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Pending approval</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'warn-dark' if counters.pending > 0 else 'ink' }}">{{ counters.pending }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Will resolve (est.)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-info-dark">{{ counters.pending_resolve_estimate }}</div>
+      <div class="text-[10px] text-ink-subtle mt-0.5">findings if all approved</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Applied (30d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ok-dark">{{ counters.applied_30d }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Failed</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.failed > 0 else 'ink' }}">{{ counters.failed }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Rejected</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink-muted">{{ counters.rejected }}</div>
+    </div>
+  </div>
+
+  <!-- Canary zone toggles -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold text-ink">Per-zone enablement (canary control)</h2>
+      <div class="text-[12px] text-ink-muted">Only enabled zones generate proposals on new scans</div>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Auto-fix proposals</th>
+          <th class="text-left px-5 py-3">Last toggled</th>
+          {% if user.role == 'admin' %}<th class="text-right px-5 py-3">Toggle</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for z in zone_settings %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-3 text-[13.5px] text-ink font-semibold">{{ z.zone_name }}</td>
+          <td class="px-5 py-3 text-[12px]">{% if z.enabled %}<span class="text-ok-dark font-semibold">enabled</span>{% else %}<span class="text-ink-muted">disabled</span>{% endif %}</td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ z.updated_at | datetime_str if z.updated_at else '—' }}{% if z.updated_by_email %} · {{ z.updated_by_email }}{% endif %}</td>
+          {% if user.role == 'admin' %}
+          <td class="px-5 py-3 text-right">
+            <form method="post" action="{{ base_path }}/scanners/auto-fix/zone/{{ z.zone_id }}" class="inline">
+              <input type="hidden" name="enabled" value="{{ 'off' if z.enabled else 'on' }}">
+              <button class="text-brand hover:underline font-semibold text-[12.5px]">{{ 'disable' if z.enabled else 'enable' }}</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 flex-wrap text-[12.5px]">
+    <span class="text-ink-muted font-medium">Status:</span>
+    <a href="{{ base_path }}/scanners/auto-fix" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_status else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for st in ['pending_approval','applied','failed','rejected'] %}
+    <a href="{{ base_path }}/scanners/auto-fix?status={{ st }}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_status == st else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ st }}</a>
+    {% endfor %}
+    <span class="mx-2 text-ink-subtle">|</span>
+    <span class="text-ink-muted font-medium">Site:</span>
+    <a href="{{ base_path }}/scanners/auto-fix" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_zone_id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for z in zones %}
+    <a href="{{ base_path }}/scanners/auto-fix?zone_id={{ z.id }}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_zone_id == z.id else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ z.name }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- Proposals list -->
+  {% if user.role == 'admin' and proposals | selectattr('status','equalto','pending_approval') | list | length > 0 %}
+  <form method="post" action="{{ base_path }}/scanners/auto-fix/apply-batch" id="batch-form">
+  {% endif %}
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line flex items-center justify-between">
+      <h2 class="text-[15px] font-semibold text-ink">Proposals</h2>
+      {% if user.role == 'admin' and proposals | selectattr('status','equalto','pending_approval') | list | length > 0 %}
+      <button type="submit" form="batch-form" class="h-9 px-4 bg-brand hover:bg-brand-600 text-white font-semibold text-[12.5px] rounded-md shadow-card"
+              onclick="return confirm('Apply all checked proposals?')">
+        Apply all checked
+      </button>
+      {% endif %}
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          {% if user.role == 'admin' %}<th class="text-left px-3 py-3" style="width: 2rem"></th>{% endif %}
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Proposed fix</th>
+          <th class="text-left px-5 py-3">Triggered by finding</th>
+          <th class="text-right px-5 py-3">Will resolve</th>
+          <th class="text-left px-5 py-3">Status</th>
+          <th class="text-left px-5 py-3">Created</th>
+          {% if user.role == 'admin' %}<th class="text-right px-5 py-3">Actions</th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in proposals %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          {% if user.role == 'admin' %}
+          <td class="px-3 py-3 text-center">
+            {% if p.status == 'pending_approval' %}
+            <input type="checkbox" form="batch-form" name="proposal_ids" value="{{ p.id }}" class="rounded">
+            {% endif %}
+          </td>
+          {% endif %}
+          <td class="px-5 py-3 text-[12px] text-ink-muted tabular">#{{ p.id }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink font-semibold">{{ p.zone_name }}</td>
+          <td class="px-5 py-3 text-[13px] max-w-md">
+            <div class="font-semibold text-ink">{{ p.action_summary }}</div>
+            <div class="text-[11px] text-ink-subtle font-mono">{{ p.action_kind }}</div>
+            <div class="text-[11px] text-ink-muted mt-1"><span class="text-ink-subtle">→</span> {{ p.proposed_state }}</div>
+          </td>
+          <td class="px-5 py-3 text-[12px]">
+            <a href="{{ base_path }}/vapt/findings/{{ p.finding_id }}" class="text-ink hover:text-brand font-medium">{{ p.finding_title | truncate(80) }}</a>
+            <div class="text-[11px] mt-0.5">
+              {{ sev_chip(p.finding_severity) }}
+              <span class="ml-1 font-mono text-ink-subtle">{{ p.scanner }}/{{ p.scanner_template_id }}</span>
+            </div>
+          </td>
+          <td class="px-5 py-3 text-[13px] text-right tabular font-semibold text-{{ 'info-dark' if p.estimated_findings_resolved > 1 else 'ink' }}">
+            {{ p.estimated_findings_resolved }}
+          </td>
+          <td class="px-5 py-3">{{ status_chip(p.status) }}{% if p.failure_reason %}<div class="text-[11px] text-danger-dark mt-0.5 font-mono max-w-xs truncate" title="{{ p.failure_reason }}">{{ p.failure_reason }}</div>{% endif %}</td>
+          <td class="px-5 py-3 text-[11.5px] text-ink-muted">{{ p.created_at | datetime_str }}</td>
+          {% if user.role == 'admin' %}
+          <td class="px-5 py-3 text-right text-[12px]">
+            {% if p.status == 'pending_approval' %}
+            <form method="post" action="{{ base_path }}/scanners/auto-fix/{{ p.id }}/apply" class="inline"
+                  onclick="return confirm('Apply this CF fix to {{ p.zone_name }}?')">
+              <button class="text-brand hover:underline font-semibold">apply</button>
+            </form>
+            <span class="text-ink-subtle mx-1">·</span>
+            <form method="post" action="{{ base_path }}/scanners/auto-fix/{{ p.id }}/reject" class="inline">
+              <input type="hidden" name="reason" value="manually-rejected">
+              <button class="text-ink-muted hover:text-danger font-medium">reject</button>
+            </form>
+            {% elif p.status == 'applied' and p.change_log_id %}
+            <a href="{{ base_path }}/change-log/{{ p.change_log_id }}" class="text-brand hover:underline">view change</a>
+            {% else %}
+            <span class="text-ink-subtle">—</span>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="{{ 9 if user.role == 'admin' else 7 }}" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">No proposals match these filters</div>
+            <div>Proposals are generated automatically after each scan against enabled zones. {% if user.role == 'admin' %}Click <strong>Regenerate</strong> above to scan existing open findings now.{% endif %}</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if user.role == 'admin' and proposals | selectattr('status','equalto','pending_approval') | list | length > 0 %}
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

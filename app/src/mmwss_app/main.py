@@ -19,6 +19,7 @@ from .config import get_settings
 from .routes import (
     api_routes,
     auth_routes,
+    auto_fix_routes,
     change_log_routes,
     pages,
     scanner_routes,
@@ -73,6 +74,8 @@ change_log_routes.templates = templates
 app.include_router(change_log_routes.router, prefix=BASE_PATH)
 scanner_routes.templates = templates
 app.include_router(scanner_routes.router, prefix=BASE_PATH)
+auto_fix_routes.templates = templates
+app.include_router(auto_fix_routes.router, prefix=BASE_PATH)
 
 
 @app.get("/healthz")

@@ -99,7 +99,7 @@ class ZAPScanner:
         log.info("ZAP %s yielded %d raw alerts for %s", mode, len(alerts), target.base_url)
 
         sev_min = ("info", "low", "medium", "high").index(sev_floor) if sev_floor in ("info", "low", "medium", "high") else 1
-        findings: list[RawFinding] = []
+        raw_findings: list[RawFinding] = []
         for a in alerts:
             try:
                 rf = self._alert_to_finding(a, target)
@@ -107,10 +107,63 @@ class ZAPScanner:
                     continue
                 if ("info", "low", "medium", "high", "critical").index(rf.severity) < sev_min:
                     continue
-                findings.append(rf)
+                raw_findings.append(rf)
             except Exception:
                 log.exception("ZAP map error for alert %s", a.get("pluginId"))
-        return findings
+
+        # ─── 6. Roll up per-URL duplicates into one finding per template_id ───
+        # ZAP reports per-URL: a 600-page site missing CSP yields 600 alerts.
+        # All represent ONE underlying issue. Collapse to (template_id) →
+        # single RawFinding with affected_urls listed in proof_text.
+        return self._rollup(raw_findings, target)
+
+    @staticmethod
+    def _rollup(raw_findings: list[RawFinding], target: ScanTarget) -> list[RawFinding]:
+        """Collapse same template_id into one finding per zone.
+
+        For site-wide issues (missing headers, info disclosure, etc.) ZAP
+        emits a finding per page. Rolling them up keeps the queue manageable
+        and the auto-fix engine can address the root cause with one CF rule.
+        """
+        by_template: dict[str, list[RawFinding]] = {}
+        for rf in raw_findings:
+            by_template.setdefault(rf.template_id, []).append(rf)
+
+        rolled: list[RawFinding] = []
+        for template_id, group in by_template.items():
+            if len(group) == 1:
+                rolled.append(group[0])
+                continue
+            # Multiple — collapse. Pick the highest-severity exemplar as the
+            # canonical record; the rest become "also affects" URLs in proof.
+            sev_order = ("info", "low", "medium", "high", "critical")
+            group.sort(key=lambda f: sev_order.index(f.severity), reverse=True)
+            primary = group[0]
+            affected_urls = sorted({f.target_url for f in group})
+            url_sample = affected_urls[:10]
+            extra_count = max(0, len(affected_urls) - 10)
+            proof_lines = [primary.proof] if primary.proof else []
+            proof_lines.append(f"Affected URLs ({len(affected_urls)} total):")
+            proof_lines.extend(f"  - {u}" for u in url_sample)
+            if extra_count > 0:
+                proof_lines.append(f"  ... and {extra_count} more")
+            rolled.append(RawFinding(
+                template_id=primary.template_id,
+                title=primary.title,
+                severity=primary.severity,
+                target_url=target.base_url,    # zone apex — site-wide issue
+                parameter=primary.parameter,
+                description=primary.description,
+                cve=primary.cve,
+                cvss=primary.cvss,
+                epss=primary.epss,
+                owasp_category=primary.owasp_category,
+                proof="\n".join(proof_lines),
+                raw={"rollup_count": len(group),
+                     "affected_urls_sample": url_sample,
+                     "primary_alert": primary.raw},
+            ))
+        return rolled
 
     # ───── ZAP REST helpers ─────
 

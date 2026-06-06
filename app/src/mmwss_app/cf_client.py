@@ -113,6 +113,98 @@ def _get_or_create_custom_ruleset(cf_zone_id: str, token: str) -> tuple[str, lis
     raise CloudflareApiError(f"HTTP {r.status_code} fetching entrypoint")
 
 
+_HEADER_PHASE = "http_response_headers_transform"
+
+
+def _get_or_create_header_ruleset(cf_zone_id: str, token: str) -> tuple[str, list[dict]]:
+    """Return (ruleset_id, existing_rules) for the response-headers transform
+    phase. Creates an empty entrypoint if it doesn't exist yet."""
+    headers = _headers(token)
+    url = f"{_CF_BASE}/zones/{cf_zone_id}/rulesets/phases/{_HEADER_PHASE}/entrypoint"
+    try:
+        r = requests.get(url, headers=headers, timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        raise CloudflareApiError(f"network error: {e}")
+    if r.status_code == 200:
+        try:
+            data = r.json()
+        except ValueError:
+            raise CloudflareApiError("non-JSON entrypoint response")
+        if data.get("success"):
+            return data["result"]["id"], data["result"].get("rules", []) or []
+        raise CloudflareApiError(_first_error(data))
+    if r.status_code == 404:
+        try:
+            r2 = requests.put(url, json={"rules": []}, headers=headers, timeout=_TIMEOUT)
+            data2 = r2.json()
+        except (requests.RequestException, ValueError) as e:
+            raise CloudflareApiError(f"creating header entrypoint: {e}")
+        if not data2.get("success"):
+            raise CloudflareApiError(_first_error(data2))
+        return data2["result"]["id"], []
+    raise CloudflareApiError(f"HTTP {r.status_code} fetching header entrypoint")
+
+
+def add_response_header_rule(cf_zone_id: str, header_name: str,
+                              header_value: str, description: str) -> dict:
+    """Add (or replace, if same header) a Transform Rule that sets a response
+    header on every response from this zone. Idempotent: if a rule already
+    sets this header, update it instead of creating a duplicate.
+
+    Returns CF's rule payload (or {'updated': True, 'rule_id': ...} on update).
+    """
+    token = _active_token()
+    ruleset_id, existing_rules = _get_or_create_header_ruleset(cf_zone_id, token)
+
+    # Find an existing rule that sets this header
+    existing_rule_id = None
+    for r in existing_rules:
+        params = r.get("action_parameters") or {}
+        hdrs = params.get("headers") or {}
+        if header_name in hdrs:
+            existing_rule_id = r.get("id")
+            break
+
+    payload = {
+        "expression": "true",         # all responses
+        "action": "rewrite",
+        "action_parameters": {
+            "headers": {
+                header_name: {
+                    "operation": "set",
+                    "value": header_value,
+                }
+            }
+        },
+        "description": description[:255],
+        "enabled": True,
+    }
+
+    if existing_rule_id:
+        url = f"{_CF_BASE}/zones/{cf_zone_id}/rulesets/{ruleset_id}/rules/{existing_rule_id}"
+        method = requests.patch
+    else:
+        url = f"{_CF_BASE}/zones/{cf_zone_id}/rulesets/{ruleset_id}/rules"
+        method = requests.post
+
+    try:
+        r = method(url, json=payload, headers=_headers(token), timeout=_TIMEOUT)
+    except requests.RequestException as e:
+        raise CloudflareApiError(f"network error: {e}")
+    try:
+        data = r.json()
+    except ValueError:
+        raise CloudflareApiError(f"non-JSON response (HTTP {r.status_code})")
+    if not data.get("success"):
+        raise CloudflareApiError(_first_error(data))
+    _touch_token()
+    out = data.get("result", {})
+    if existing_rule_id:
+        out["updated"] = True
+        out["rule_id"] = existing_rule_id
+    return out
+
+
 def add_block_path_rule(cf_zone_id: str, path: str, description: str) -> dict:
     """Block all requests whose URI path exactly matches `path` by appending
     a rule to the zone's custom firewall ruleset. Idempotent: if an equivalent
