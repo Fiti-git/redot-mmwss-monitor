@@ -8,3 +8,4 @@ pydantic==2.9.2
 pydantic-settings==2.6.1
 bcrypt==4.2.0
 python-dotenv==1.0.1
+requests==2.32.3
