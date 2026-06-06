@@ -20,6 +20,8 @@ volumes:
     name: mmwss_pgdata
   mmwss_reports:
     name: mmwss_reports
+  mmwss_zap_data:
+    name: mmwss_zap_data
 
 services:
   db:
@@ -61,7 +63,11 @@ services:
       CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN}
       CLOUDFLARE_TOKEN_LABEL: ${CLOUDFLARE_TOKEN_LABEL:-primary}
       SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      TEAMS_WEBHOOK_URL: ${TEAMS_WEBHOOK_URL:-}
       MMWSS_PUBLIC_URL: ${MMWSS_PUBLIC_URL:-https://coldcalling.redotglobal.agency}
+      WPMUDEV_USER_API_KEY: ${WPMUDEV_USER_API_KEY:-}
+      ZAP_URL: ${ZAP_URL:-http://zap:8090}
+      ZAP_API_KEY: ${ZAP_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -101,3 +107,41 @@ services:
       resources:
         limits:
           memory: 256m
+
+  # ───── OWASP ZAP (DAST scanner daemon) ─────
+  # Long-running container; collector calls its REST API on port 8090.
+  # Phase 1 default: passive scan + spider only (safe, no payload injection).
+  # Active mode is gated per-scanner-config and requires written authorization.
+  # JVM heap capped at 768m so total container memory stays under ~1GB
+  # — fits within the 3.7GB callora budget alongside db + collector + app.
+  zap:
+    image: softwaresecurityproject/zap-stable:latest
+    container_name: mmwss-zap
+    restart: unless-stopped
+    logging: *default-logging
+    user: zap
+    environment:
+      _JAVA_OPTIONS: "-Xmx768m -XX:+UseG1GC -Djava.awt.headless=true"
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8090
+      -config api.key=${ZAP_API_KEY}
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config database.recoverylog=false
+      -config connection.timeoutInSecs=30
+    networks:
+      - mmwss_net
+    volumes:
+      - mmwss_zap_data:/zap/wrk
+    deploy:
+      resources:
+        limits:
+          memory: 1100m
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS \"http://localhost:8090/JSON/core/view/version/?apikey=${ZAP_API_KEY}\" > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
