@@ -115,7 +115,7 @@ services:
   # JVM heap capped at 768m so total container memory stays under ~1GB
   # — fits within the 3.7GB callora budget alongside db + collector + app.
   zap:
-    image: softwaresecurityproject/zap-stable:latest
+    image: zaproxy/zap-stable:latest
     container_name: mmwss-zap
     restart: unless-stopped
     logging: *default-logging
