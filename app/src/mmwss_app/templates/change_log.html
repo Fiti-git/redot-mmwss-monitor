@@ -1,0 +1,116 @@
+{% extends "_app_shell.html" %}
+{% block title %}Change log — MMWSS{% endblock %}
+
+{% macro test_chip(r) %}
+{% if r == 'passed' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-ok-soft text-ok-dark">passed</span>
+{% elif r == 'failed' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">failed</span>
+{% else %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">not tested</span>{% endif %}
+{% endmacro %}
+
+{% macro source_chip(s) %}
+{% if s == 'auto_cf_fix' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">auto · CF fix</span>
+{% elif s == 'auto_vapt_remediation' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">auto · VAPT</span>
+{% elif s == 'scheduled' %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">scheduled</span>
+{% else %}<span class="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">manual</span>{% endif %}
+{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1400px]">
+  <div class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-[24px] font-bold text-ink tracking-tight">Change log</h1>
+      <p class="text-[13.5px] text-ink-muted mt-1">Every modification to a tracked site — plugin updates, Cloudflare changes, server config, VAPT remediations. Auto-recorded for one-click fixes &amp; VAPT remediations, manually entered for engineer-driven work.</p>
+    </div>
+    <a href="{{ base_path }}/change-log/new"
+       class="inline-flex items-center gap-1.5 h-10 px-4 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-lg shadow-card">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" class="w-4 h-4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New entry
+    </a>
+  </div>
+
+  <!-- Counters -->
+  <div class="grid grid-cols-2 lg:grid-cols-6 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Total</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.total }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Last 30 days</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.last_30d }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Untested (90d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'warn' if counters.untested > 0 else 'ink' }}">{{ counters.untested }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Rolled back (90d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if counters.rolled_back_recent > 0 else 'ink' }}">{{ counters.rolled_back_recent }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Auto CF fix (30d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.auto_cf_30d }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Auto VAPT (30d)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.auto_vapt_30d }}</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="flex items-center gap-2 flex-wrap text-[12.5px]">
+    <span class="text-ink-muted font-medium">Category:</span>
+    <a href="{{ base_path }}/change-log" class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if not filter_category else 'bg-white border border-line text-ink-muted hover:text-ink' }}">All</a>
+    {% for k, lbl in category_label.items() %}
+    <a href="{{ base_path }}/change-log?category={{ k }}"
+       class="px-2.5 py-1 rounded-md {{ 'bg-ink text-white font-semibold' if filter_category == k else 'bg-white border border-line text-ink-muted hover:text-ink' }}">{{ lbl }}</a>
+    {% endfor %}
+  </div>
+
+  <!-- List -->
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">#</th>
+          <th class="text-left px-5 py-3">Executed</th>
+          <th class="text-left px-5 py-3">Category</th>
+          <th class="text-left px-5 py-3">Title</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Source</th>
+          <th class="text-left px-5 py-3">Test</th>
+          <th class="text-left px-5 py-3">Rolled back</th>
+          <th class="text-left px-5 py-3">Engineer</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted tabular">#{{ e.id }}</td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ e.executed_at | datetime_str }}</td>
+          <td class="px-5 py-3 text-[12px] font-mono text-ink-muted">{{ category_label[e.category] }}</td>
+          <td class="px-5 py-3 text-[13.5px]">
+            <a href="{{ base_path }}/change-log/{{ e.id }}" class="text-ink font-semibold hover:text-brand">{{ e.title }}</a>
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ e.zone_name or '—' }}</td>
+          <td class="px-5 py-3">{{ source_chip(e.source) }}</td>
+          <td class="px-5 py-3">{{ test_chip(e.test_result) }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if e.rolled_back %}<span class="text-danger font-semibold">yes</span>
+            {% else %}<span class="text-ink-subtle">no</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px] text-ink-muted">{{ e.engineer_email or 'system' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">Change log is empty</div>
+            <div>One-click CF fixes and VAPT remediations auto-record here. Engineers add manual entries for plugin updates, server config, etc.</div>
+            <a href="{{ base_path }}/change-log/new" class="mt-2 text-brand font-semibold">+ New entry</a>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

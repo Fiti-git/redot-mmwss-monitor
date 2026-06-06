@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
-from .. import auth, cf_client, db, fixers
+from .. import auth, cf_client, change_log, db, fixers
 
 log = logging.getLogger(__name__)
 
@@ -79,6 +79,18 @@ def apply_fix(req: FixRequest, request: Request, user: dict = Depends(auth.requi
                 "UPDATE mmwss.zone_snapshots SET settings_json = jsonb_set(settings_json, %s, %s::jsonb) WHERE id = %s",
                 ("{" + fix.target + "}", json.dumps(fix.value), snap["id"]),
             )
+        # Record in change log
+        change_log.create_entry(
+            category="cf_setting",
+            title=f"{zone['name']}: {fix.target} → {fix.value}",
+            description=f"One-click fix applied via MMWSS (rule {req.rule_id}).",
+            before_state=str(before) if before is not None else None,
+            after_state=str(fix.value),
+            test_result="passed",
+            test_notes="Cloudflare API confirmed change applied (200 success).",
+            zone_id=zone["id"], source="auto_cf_fix",
+            engineer_user_id=int(user["id"]),
+        )
         auth.record_audit(int(user["id"]), user["email"], "cf_fix.applied", ip=ip,
                           target_type="zone", target_id=str(req.zone_id),
                           details={"rule_id": req.rule_id, "kind": "setting",
@@ -112,6 +124,19 @@ def apply_fix(req: FixRequest, request: Request, user: dict = Depends(auth.requi
                 WHERE id = (SELECT id FROM mmwss.zone_snapshots WHERE zone_id = %s ORDER BY captured_at DESC LIMIT 1)
                 """,
                 (zone["id"],),
+            )
+        # Record in change log (skip when no-op idempotent re-apply)
+        if not already:
+            change_log.create_entry(
+                category="cf_firewall_rule",
+                title=f"{zone['name']}: block {fix.target}",
+                description=f"Cloudflare custom-firewall rule added via MMWSS one-click fix (rule {req.rule_id}).",
+                before_state="no rule",
+                after_state=f"block (http.request.uri.path eq \"{fix.target}\")",
+                test_result="passed",
+                test_notes="Cloudflare Rulesets API confirmed rule created.",
+                zone_id=zone["id"], source="auto_cf_fix",
+                engineer_user_id=int(user["id"]),
             )
         auth.record_audit(int(user["id"]), user["email"], "cf_fix.applied", ip=ip,
                           target_type="zone", target_id=str(req.zone_id),

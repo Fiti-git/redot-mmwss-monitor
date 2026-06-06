@@ -149,6 +149,7 @@ def vapt_finding_update(
         finding_id, status,
         remediation_plan=remediation_plan,
         remediation_evidence=remediation_evidence,
+        engineer_user_id=int(user["id"]),
     )
     auth.record_audit(int(user["id"]), user["email"], "vapt_finding.update",
                       ip=_client_ip(request), target_type="vapt_finding", target_id=str(finding_id),

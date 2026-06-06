@@ -1,0 +1,89 @@
+{% extends "_app_shell.html" %}
+{% block title %}New change log entry — MMWSS{% endblock %}
+
+{% block app_main %}
+<div class="max-w-[920px]">
+  <div class="mb-6">
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/change-log" class="hover:text-brand">Change log</a> / New entry
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">New change log entry</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">Record a system change: plugin update, server config, custom deployment, etc.</p>
+  </div>
+
+  <form method="post" action="{{ base_path }}/change-log/new" class="bg-white border border-line rounded-xl2 shadow-card p-6 space-y-5">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Category</label>
+        <select name="category" required class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          {% for k, lbl in category_label.items() %}
+          <option value="{{ k }}">{{ lbl }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Site (optional)</label>
+        <select name="zone_id" class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <option value="">— Cross-cutting / not site-specific —</option>
+          {% for z in zones %}
+          <option value="{{ z.id }}">{{ z.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Title</label>
+      <input name="title" type="text" required maxlength="200"
+             placeholder='e.g., "Yoast SEO 21.4 → 21.5 on learnislam.sg"'
+             class="w-full h-11 px-3.5 bg-white border border-line rounded-lg text-[14px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Description</label>
+      <textarea name="description" rows="3" placeholder="What was changed and why"
+                class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Before state</label>
+        <textarea name="before_state" rows="2" placeholder='e.g., "Yoast SEO v21.4"'
+                  class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">After state</label>
+        <textarea name="after_state" rows="2" placeholder='e.g., "Yoast SEO v21.5"'
+                  class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13px] font-mono focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Test result</label>
+        <select name="test_result" class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+          <option value="not_tested">Not tested yet</option>
+          <option value="passed">Passed</option>
+          <option value="failed">Failed</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[13px] font-semibold text-ink mb-1.5">Test notes</label>
+        <input name="test_notes" type="text" placeholder="Staging URL, test plan, anything observed"
+               class="w-full h-11 px-3 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand">
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-[13px] font-semibold text-ink mb-1.5">Rollback plan</label>
+      <textarea name="rollback_plan" rows="2" placeholder="How to undo this change if needed (snapshot ID, prior version, etc.)"
+                class="w-full px-3 py-2 bg-white border border-line rounded-lg text-[13.5px] focus:ring-2 focus:ring-brand-200 focus:border-brand"></textarea>
+    </div>
+
+    <div class="flex items-center gap-3 pt-2 border-t border-line">
+      <a href="{{ base_path }}/change-log" class="h-10 px-4 inline-flex items-center text-[13px] font-semibold text-ink-muted hover:text-ink">Cancel</a>
+      <button type="submit" class="h-10 px-5 bg-brand hover:bg-brand-600 text-white font-semibold text-[13px] rounded-md shadow-card">Record entry</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

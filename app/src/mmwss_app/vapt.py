@@ -218,9 +218,18 @@ def create_finding(*, report_id: int, title: str, severity: str,
 
 def update_finding_status(finding_id: int, new_status: str, *,
                           remediation_plan: str | None = None,
-                          remediation_evidence: str | None = None) -> None:
+                          remediation_evidence: str | None = None,
+                          engineer_user_id: int | None = None) -> None:
     if new_status not in STATUS_LABEL:
         raise ValueError(f"unknown status: {new_status}")
+    # Look up the current status so we know if this is a fresh transition
+    # into 'remediated' or 'verified' (worth recording as a change log entry)
+    current = db.fetch_one(
+        "SELECT status, title, severity, zone_id, cve_reference FROM mmwss.vapt_findings WHERE id = %s",
+        (finding_id,),
+    )
+    old_status = current["status"] if current else None
+
     sets = ["status = %s"]
     params: list[Any] = [new_status]
     now = datetime.now(timezone.utc)
@@ -238,6 +247,26 @@ def update_finding_status(finding_id: int, new_status: str, *,
     params.append(finding_id)
     sql = f"UPDATE mmwss.vapt_findings SET {', '.join(sets)} WHERE id = %s"
     db.execute(sql, tuple(params))
+
+    # Auto-record the remediation in the change log when a finding flips
+    # from open/in_progress → remediated or verified for the first time.
+    if (current and old_status not in ("remediated", "verified")
+            and new_status in ("remediated", "verified")):
+        from . import change_log
+        cve_part = f" ({current['cve_reference']})" if current.get("cve_reference") else ""
+        change_log.create_entry(
+            category="vapt_remediation",
+            title=f"VAPT #{finding_id}{cve_part}: {current['title']}",
+            description=(remediation_plan or remediation_evidence or
+                         f"VAPT finding marked {new_status}."),
+            after_state=new_status,
+            test_result="passed" if new_status == "verified" else "not_tested",
+            test_notes=remediation_evidence or None,
+            zone_id=current.get("zone_id"),
+            vapt_finding_id=finding_id,
+            source="auto_vapt_remediation",
+            engineer_user_id=engineer_user_id,
+        )
 
 
 # ───────── aggregate counters for nav badge / dashboard ─────────
