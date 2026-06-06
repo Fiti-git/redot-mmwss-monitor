@@ -21,7 +21,7 @@ MMWSS is an internal monitoring + reporting tool for Cloudflare-protected sites.
   - **every 60s** — HTTP probe each tracked zone; write row to `uptime_checks`; open/close incidents
   - **every 1h** — Cloudflare GraphQL pull (httpRequests1hGroups → `analytics_hourly`)
   - **every 6h** — Full zone snapshot: settings, SSL cert packs, firewall rules, DNS records
-  - **daily 07:00 SGT** — generate daily report (HTML + PDF), email + persist
+  - **daily 07:00 SGT** — generate daily report (HTML + PDF), Slack-announce + persist
   - **weekly Monday 08:00 SGT** — weekly report
   - **monthly 1st 09:00 SGT** — monthly report
 - Sources Cloudflare tokens from `mmwss.cf_tokens` (decrypts via `MMWSS_MASTER_KEY`)
