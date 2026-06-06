@@ -29,8 +29,12 @@
   {% if fixable and user.role == 'admin' %}
   <div class="mt-3 flex items-center gap-3">
     <button type="button"
-            onclick="openFixDialog({{ r.zone_id }}, '{{ r.rule_id }}', {{ r.zone_name | tojson }}, {{ r.title | tojson }}, {{ fixable_rules[r.rule_id] | tojson }})"
-            class="inline-flex items-center gap-1.5 h-7 px-3 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[11.5px] rounded-md shadow-card transition-colors">
+            class="mmwss-fix-btn inline-flex items-center gap-1.5 h-7 px-3 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[11.5px] rounded-md shadow-card transition-colors"
+            data-zone-id="{{ r.zone_id }}"
+            data-rule-id="{{ r.rule_id }}"
+            data-zone-name="{{ r.zone_name }}"
+            data-rule-title="{{ r.title }}"
+            data-action="{{ fixable_rules[r.rule_id] }}">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
         <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
       </svg>
@@ -149,8 +153,8 @@
       <div id="fix-error" class="text-[12px] text-danger mt-2 min-h-[16px]"></div>
     </div>
     <div class="px-5 py-3 border-t border-line bg-surface-alt rounded-b-xl2 flex justify-end gap-2">
-      <button type="button" onclick="closeFixModal()" class="h-10 px-4 text-[13px] font-semibold text-ink-muted hover:text-ink hover:bg-white rounded-md transition-colors">Cancel</button>
-      <button id="fix-submit" type="button" onclick="submitFix()"
+      <button id="fix-cancel" type="button" class="h-10 px-4 text-[13px] font-semibold text-ink-muted hover:text-ink hover:bg-white rounded-md transition-colors">Cancel</button>
+      <button id="fix-submit" type="button"
               class="h-10 px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[13px] rounded-md shadow-card transition-colors disabled:opacity-60">
         Apply fix
       </button>
@@ -160,34 +164,37 @@
 
 <script>
 (function() {
+  const FIX_URL = "{{ base_path }}/api/fix";
   let currentZoneId = null;
   let currentRuleId = null;
 
-  window.openFixDialog = function(zoneId, ruleId, site, ruleTitle, actionDesc) {
+  function $(id) { return document.getElementById(id); }
+
+  function openFixDialog(zoneId, ruleId, site, ruleTitle, actionDesc) {
     currentZoneId = zoneId;
     currentRuleId = ruleId;
-    document.getElementById('fix-site').textContent = site;
-    document.getElementById('fix-rule').textContent = ruleTitle;
-    document.getElementById('fix-action').textContent = actionDesc;
-    document.getElementById('fix-password').value = '';
-    document.getElementById('fix-error').textContent = '';
-    document.getElementById('fix-submit').disabled = false;
-    document.getElementById('fix-submit').textContent = 'Apply fix';
-    document.getElementById('fix-modal').classList.remove('hidden');
-    setTimeout(() => document.getElementById('fix-password').focus(), 50);
-  };
+    $('fix-site').textContent = site || '';
+    $('fix-rule').textContent = ruleTitle || '';
+    $('fix-action').textContent = actionDesc || '';
+    $('fix-password').value = '';
+    $('fix-error').textContent = '';
+    $('fix-submit').disabled = false;
+    $('fix-submit').textContent = 'Apply fix';
+    $('fix-modal').classList.remove('hidden');
+    setTimeout(function() { $('fix-password').focus(); }, 50);
+  }
 
-  window.closeFixModal = function() {
-    document.getElementById('fix-modal').classList.add('hidden');
-    document.getElementById('fix-password').value = '';
+  function closeFixModal() {
+    $('fix-modal').classList.add('hidden');
+    $('fix-password').value = '';
     currentZoneId = null;
     currentRuleId = null;
-  };
+  }
 
-  window.submitFix = async function() {
-    const password = document.getElementById('fix-password').value;
-    const errEl = document.getElementById('fix-error');
-    const btn = document.getElementById('fix-submit');
+  async function submitFix() {
+    const password = $('fix-password').value;
+    const errEl = $('fix-error');
+    const btn = $('fix-submit');
     if (!password) { errEl.textContent = 'Password required.'; return; }
     if (!currentZoneId || !currentRuleId) return;
 
@@ -196,32 +203,60 @@
     btn.textContent = 'Applying...';
 
     try {
-      const res = await fetch('{{ base_path }}/api/fix', {
+      const res = await fetch(FIX_URL, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({zone_id: currentZoneId, rule_id: currentRuleId, password: password}),
+        credentials: 'same-origin',
+        body: JSON.stringify({zone_id: parseInt(currentZoneId, 10), rule_id: currentRuleId, password: password}),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = await res.json().catch(function() { return {}; });
       if (res.ok) {
-        // Success — close modal and reload so the recommendations + score update
         closeFixModal();
         window.location.reload();
       } else {
-        errEl.textContent = data.detail || ('Failed (HTTP ' + res.status + ')');
+        errEl.textContent = (data && data.detail) || ('Failed (HTTP ' + res.status + ')');
         btn.disabled = false;
         btn.textContent = 'Apply fix';
       }
     } catch (e) {
-      errEl.textContent = 'Network error: ' + e.message;
+      errEl.textContent = 'Network error: ' + (e && e.message);
       btn.disabled = false;
       btn.textContent = 'Apply fix';
     }
-  };
+  }
 
-  // ESC closes the modal
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape' && !document.getElementById('fix-modal').classList.contains('hidden')) {
+  // Wire up via event delegation — works for any number of buttons,
+  // survives dynamic re-renders, and never has inline-attribute escaping bugs.
+  document.addEventListener('click', function(e) {
+    const btn = e.target.closest('.mmwss-fix-btn');
+    if (btn) {
+      e.preventDefault();
+      openFixDialog(
+        btn.dataset.zoneId,
+        btn.dataset.ruleId,
+        btn.dataset.zoneName,
+        btn.dataset.ruleTitle,
+        btn.dataset.action
+      );
+      return;
+    }
+    if (e.target.closest('#fix-cancel')) {
+      e.preventDefault();
       closeFixModal();
+    }
+    if (e.target.closest('#fix-submit')) {
+      e.preventDefault();
+      submitFix();
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !$('fix-modal').classList.contains('hidden')) {
+      closeFixModal();
+    }
+    if (e.key === 'Enter' && document.activeElement && document.activeElement.id === 'fix-password') {
+      e.preventDefault();
+      submitFix();
     }
   });
 })();
