@@ -260,39 +260,35 @@ def write_audit_hashed(db_mod, *, user_id: int | None, user_email: str | None,
                        action: str, ip: str | None,
                        target_type: str | None, target_id: str | None,
                        details: dict | None) -> int:
-    """Append an audit row with computed hash chain.
+    """Append an audit row with computed hash chain in a SINGLE INSERT.
 
-    Two-step (INSERT, then UPDATE row_hash) to use the DB's own created_at
-    in the canonical form.
+    The existing audit_log_immutable trigger blocks UPDATE/DELETE — so we
+    cannot do INSERT-then-UPDATE. Instead we pre-compute the timestamp in
+    Python and hash everything before the INSERT.
     """
     prev = latest_audit_hash(db_mod)
+    ts = _now()
+    canonical = _canonical_audit_row(
+        user_id=user_id, user_email=user_email, action=action, ip=ip,
+        target_type=target_type, target_id=target_id,
+        details_json=details, created_at=ts,
+    )
+    row_hash = _sha256_hex(prev + canonical)
     with db_mod.conn() as c:
         with c.cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO mmwss.audit_log
-                    (user_id, user_email, action, ip,
+                    (ts, user_id, user_email, action, ip,
                      target_type, target_id, details_json,
-                     prev_hash)
-                VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, %s)
-                RETURNING id, created_at
+                     row_hash, prev_hash)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)
+                RETURNING id
                 """,
-                (user_id, user_email, action, ip, target_type, target_id,
-                 json.dumps(details) if details else None, prev),
+                (ts, user_id, user_email, action, ip, target_type, target_id,
+                 json.dumps(details) if details else None, row_hash, prev),
             )
-            row = cur.fetchone()
-            row_id = row["id"]
-            created = row["created_at"]
-            canonical = _canonical_audit_row(
-                user_id=user_id, user_email=user_email, action=action, ip=ip,
-                target_type=target_type, target_id=target_id,
-                details_json=details, created_at=created,
-            )
-            row_hash = _sha256_hex(prev + canonical)
-            cur.execute(
-                "UPDATE mmwss.audit_log SET row_hash = %s WHERE id = %s",
-                (row_hash, row_id),
-            )
+            row_id = cur.fetchone()["id"]
         c.commit()
     return row_id
 
@@ -307,7 +303,7 @@ def verify_audit_chain(db_mod, *, since_id: int | None = None) -> dict:
             cur.execute(
                 """
                 SELECT id, user_id, user_email, action, ip,
-                       target_type, target_id, details_json, created_at,
+                       target_type, target_id, details_json, ts,
                        row_hash, prev_hash
                   FROM mmwss.audit_log
                  WHERE id >= COALESCE(%s, 0)
@@ -324,9 +320,9 @@ def verify_audit_chain(db_mod, *, since_id: int | None = None) -> dict:
     for r in rows:
         canonical = _canonical_audit_row(
             user_id=r["user_id"], user_email=r["user_email"],
-            action=r["action"], ip=r["ip"],
+            action=r["action"], ip=str(r["ip"]) if r["ip"] else None,
             target_type=r["target_type"], target_id=r["target_id"],
-            details_json=r["details_json"], created_at=r["created_at"],
+            details_json=r["details_json"], created_at=r["ts"],
         )
         expected = _sha256_hex(prev + canonical)
         if r["row_hash"] != expected or r["prev_hash"] != prev:

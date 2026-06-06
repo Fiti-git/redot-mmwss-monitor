@@ -4,10 +4,12 @@
 -- MMWSS their WordPress sites should meet. Specifically:
 --
 -- 1. TOTP-based 2FA per user (mandatory for role='admin').
--- 2. Login attempt log + per-IP/email lockout (5 attempts / 5 minutes).
+-- 2. Login attempt log + per-IP/email lockout (10 attempts / 5 min per IP,
+--    5 failures lock the account for 15 min).
 -- 3. Audit log hash-chain (sha256(prev_hash + canonical_row)) so deletions or
---    edits are detectable. Not tamper-proof (DB superuser can still rewrite
---    history) but creates a chain of evidence that breaks visibly.
+--    edits are detectable. The pre-existing audit_log_immutable trigger
+--    already blocks UPDATE/DELETE at the DB layer — the hash chain is
+--    belt-and-suspenders so cross-snapshot tampering also breaks visibly.
 -- 4. backup_runs log so the daily DB backup job has a paper trail.
 
 BEGIN;
@@ -36,15 +38,17 @@ CREATE INDEX login_attempts_ip_time_idx    ON mmwss.login_attempts (ip, attempte
 CREATE INDEX login_attempts_email_time_idx ON mmwss.login_attempts (email, attempted_at DESC);
 
 -- ───── Audit log hash chain ─────
--- row_hash = sha256(prev_hash || canonical_text(this_row))
--- Backfill all existing rows with a chained hash starting from a fixed seed.
+-- The existing audit_log uses `ts` (not created_at) for timestamps.
+-- We add row_hash + prev_hash and back-fill the chain.
+-- The existing audit_log_immutable trigger blocks UPDATE, so we temporarily
+-- bypass with session_replication_role for the back-fill only.
 ALTER TABLE mmwss.audit_log
     ADD COLUMN row_hash    TEXT,
     ADD COLUMN prev_hash   TEXT;
 
-CREATE INDEX audit_log_hash_idx ON mmwss.audit_log (id);
+CREATE INDEX audit_log_row_hash_idx ON mmwss.audit_log (row_hash);
 
--- Initial chain — seed with constant, walk forward through existing rows.
+SET LOCAL session_replication_role = 'replica';
 DO $$
 DECLARE
     r RECORD;
@@ -54,18 +58,18 @@ DECLARE
 BEGIN
     FOR r IN
         SELECT id, user_id, user_email, action, ip, target_type, target_id,
-               details_json, created_at
+               details_json, ts
           FROM mmwss.audit_log
          ORDER BY id
     LOOP
         canonical := COALESCE(r.user_id::text, '')
                   || '|' || COALESCE(r.user_email, '')
                   || '|' || COALESCE(r.action, '')
-                  || '|' || COALESCE(r.ip, '')
+                  || '|' || COALESCE(r.ip::text, '')
                   || '|' || COALESCE(r.target_type, '')
                   || '|' || COALESCE(r.target_id, '')
                   || '|' || COALESCE(r.details_json::text, '')
-                  || '|' || r.created_at::text;
+                  || '|' || r.ts::text;
         h := encode(digest(prev || canonical, 'sha256'), 'hex');
         UPDATE mmwss.audit_log
            SET row_hash = h, prev_hash = prev
@@ -73,6 +77,7 @@ BEGIN
         prev := h;
     END LOOP;
 END $$;
+SET LOCAL session_replication_role = 'origin';
 
 -- ───── Backup run log ─────
 CREATE TABLE mmwss.backup_runs (
