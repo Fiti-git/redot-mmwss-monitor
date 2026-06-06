@@ -129,10 +129,25 @@ def _check_env(base: str, findings: dict) -> None:
 
 
 def _check_install_script(base: str, findings: dict) -> None:
+    """Only flag if install.php is actually serving the install wizard.
+    Already-installed WP returns 200 with '<h1>Already Installed</h1>' — that
+    is the correct, safe behavior and must not be flagged."""
     r = _get(urljoin(base, "/wp-admin/install.php"))
-    if r and r.status_code == 200 and r.text and ("WordPress" in r.text and "install" in r.text.lower()):
+    if not (r and r.status_code == 200 and r.text):
+        return
+    body = r.text
+    if "Already Installed" in body or "already installed" in body.lower():
+        return  # benign: WP correctly refusing reinstall
+    install_form_markers = (
+        'name="weblog_title"',
+        'name="admin_email"',
+        'name="admin_password"',
+        "Welcome to the famous five-minute",
+        "Welcome to WordPress",
+    )
+    if any(m in body for m in install_form_markers):
         _add(findings, "exposures", check="install_script_accessible", severity="critical",
-             details="/wp-admin/install.php is accessible. An attacker may be able to re-install over the site.")
+             details="/wp-admin/install.php is serving the install wizard. An attacker may be able to re-install over the site.")
 
 
 def _check_wp_admin(base: str, findings: dict) -> None:
