@@ -41,13 +41,16 @@ def authenticate(email: str, password: str) -> dict | None:
 
 
 def record_audit(user_id: int | None, email: str | None, action: str, ip: str | None = None,
-                 target_type: str | None = None, target_id: str | None = None) -> None:
+                 target_type: str | None = None, target_id: str | None = None,
+                 details: dict | None = None) -> None:
+    import json as _json
     db.execute(
         """
-        INSERT INTO mmwss.audit_log (user_id, user_email, action, ip, target_type, target_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
+        INSERT INTO mmwss.audit_log (user_id, user_email, action, ip, target_type, target_id, details_json)
+        VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb)
         """,
-        (user_id, email, action, ip, target_type, target_id),
+        (user_id, email, action, ip, target_type, target_id,
+         _json.dumps(details) if details else None),
     )
 
 

@@ -14,6 +14,7 @@
 
 {% macro rec_card(r) %}
 {% set border = 'border-l-danger' if r.severity == 'critical' else ('border-l-warn' if r.severity == 'warning' else 'border-l-info') %}
+{% set fixable = (r.source == 'cloudflare') and (r.rule_id in fixable_rules) %}
 <div class="bg-white border border-line border-l-4 {{ border }} rounded-r-lg p-4 mb-2.5 shadow-card">
   <div class="flex items-start justify-between gap-3 mb-1.5">
     <div class="flex items-center gap-2 flex-wrap">
@@ -25,6 +26,19 @@
   </div>
   <div class="text-[13.5px] font-semibold text-ink mb-1">{{ r.title }}</div>
   <div class="text-[12.5px] text-ink-muted leading-relaxed">{{ r.body }}</div>
+  {% if fixable and user.role == 'admin' %}
+  <div class="mt-3 flex items-center gap-3">
+    <button type="button"
+            onclick="openFixDialog({{ r.zone_id }}, '{{ r.rule_id }}', {{ r.zone_name | tojson }}, {{ r.title | tojson }}, {{ fixable_rules[r.rule_id] | tojson }})"
+            class="inline-flex items-center gap-1.5 h-7 px-3 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[11.5px] rounded-md shadow-card transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
+        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+      </svg>
+      One-click fix
+    </button>
+    <span class="text-[11px] text-ink-muted">{{ fixable_rules[r.rule_id] }} via Cloudflare API</span>
+  </div>
+  {% endif %}
 </div>
 {% endmacro %}
 
@@ -47,7 +61,6 @@
     {% endif %}
   </div>
 
-  <!-- Counter strip -->
   <div class="grid grid-cols-3 gap-4">
     <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
       <div class="flex items-center justify-between">
@@ -102,4 +115,116 @@
   </div>
   {% endif %}
 </div>
+
+{% if user.role == 'admin' %}
+<!-- Fix confirmation modal -->
+<div id="fix-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(15,23,42,0.55)">
+  <div class="bg-white rounded-xl2 shadow-pop max-w-md w-full">
+    <div class="px-5 py-4 border-b border-line flex items-center gap-2">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-brand">
+        <path d="M12 9v3.75M12 17h.01M5.93 19h12.14a2 2 0 001.74-3l-6.07-10.5a2 2 0 00-3.48 0L4.19 16a2 2 0 001.74 3z"/>
+      </svg>
+      <h3 class="text-[16px] font-bold text-ink">Confirm fix</h3>
+    </div>
+    <div class="px-5 py-5">
+      <p class="text-[13px] text-ink-muted mb-4">You are about to change a live Cloudflare setting. This will take effect immediately.</p>
+      <div class="bg-surface-alt border border-line rounded-lg p-3.5 mb-4 space-y-2">
+        <div class="flex justify-between text-[13px]">
+          <span class="text-ink-muted">Site</span>
+          <span id="fix-site" class="text-ink font-semibold tabular"></span>
+        </div>
+        <div class="flex justify-between text-[13px]">
+          <span class="text-ink-muted">Rule</span>
+          <span id="fix-rule" class="text-ink font-medium text-right max-w-[60%]"></span>
+        </div>
+        <div class="flex justify-between text-[13px] pt-2 border-t border-line">
+          <span class="text-ink-muted">Action</span>
+          <span id="fix-action" class="text-brand font-semibold text-right"></span>
+        </div>
+      </div>
+      <label class="block text-[12.5px] font-semibold text-ink mb-1.5 uppercase tracking-wider">Confirm with your password</label>
+      <input id="fix-password" type="password" autocomplete="current-password"
+             onkeypress="if(event.key==='Enter') submitFix()"
+             class="w-full h-11 px-3.5 bg-white border border-line rounded-lg text-[14px] text-ink focus:outline-none focus:ring-2 focus:ring-brand-200 focus:border-brand transition-all">
+      <div id="fix-error" class="text-[12px] text-danger mt-2 min-h-[16px]"></div>
+    </div>
+    <div class="px-5 py-3 border-t border-line bg-surface-alt rounded-b-xl2 flex justify-end gap-2">
+      <button type="button" onclick="closeFixModal()" class="h-10 px-4 text-[13px] font-semibold text-ink-muted hover:text-ink hover:bg-white rounded-md transition-colors">Cancel</button>
+      <button id="fix-submit" type="button" onclick="submitFix()"
+              class="h-10 px-5 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[13px] rounded-md shadow-card transition-colors disabled:opacity-60">
+        Apply fix
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  let currentZoneId = null;
+  let currentRuleId = null;
+
+  window.openFixDialog = function(zoneId, ruleId, site, ruleTitle, actionDesc) {
+    currentZoneId = zoneId;
+    currentRuleId = ruleId;
+    document.getElementById('fix-site').textContent = site;
+    document.getElementById('fix-rule').textContent = ruleTitle;
+    document.getElementById('fix-action').textContent = actionDesc;
+    document.getElementById('fix-password').value = '';
+    document.getElementById('fix-error').textContent = '';
+    document.getElementById('fix-submit').disabled = false;
+    document.getElementById('fix-submit').textContent = 'Apply fix';
+    document.getElementById('fix-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('fix-password').focus(), 50);
+  };
+
+  window.closeFixModal = function() {
+    document.getElementById('fix-modal').classList.add('hidden');
+    document.getElementById('fix-password').value = '';
+    currentZoneId = null;
+    currentRuleId = null;
+  };
+
+  window.submitFix = async function() {
+    const password = document.getElementById('fix-password').value;
+    const errEl = document.getElementById('fix-error');
+    const btn = document.getElementById('fix-submit');
+    if (!password) { errEl.textContent = 'Password required.'; return; }
+    if (!currentZoneId || !currentRuleId) return;
+
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Applying...';
+
+    try {
+      const res = await fetch('{{ base_path }}/api/fix', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({zone_id: currentZoneId, rule_id: currentRuleId, password: password}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        // Success — close modal and reload so the recommendations + score update
+        closeFixModal();
+        window.location.reload();
+      } else {
+        errEl.textContent = data.detail || ('Failed (HTTP ' + res.status + ')');
+        btn.disabled = false;
+        btn.textContent = 'Apply fix';
+      }
+    } catch (e) {
+      errEl.textContent = 'Network error: ' + e.message;
+      btn.disabled = false;
+      btn.textContent = 'Apply fix';
+    }
+  };
+
+  // ESC closes the modal
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && !document.getElementById('fix-modal').classList.contains('hidden')) {
+      closeFixModal();
+    }
+  });
+})();
+</script>
+{% endif %}
 {% endblock %}

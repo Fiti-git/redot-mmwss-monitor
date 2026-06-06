@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from .. import auth, db, queries
+from .. import auth, db, fixers, queries
 
 router = APIRouter()
 templates: Jinja2Templates = None  # type: ignore  set in main
@@ -36,7 +36,8 @@ def recommendations_page(request: Request, user: dict = Depends(auth.require_use
     return templates.TemplateResponse(
         "recommendations.html",
         {"request": request, "user": user, "items": items, "by_sev": by_sev,
-         "security": sec, "active": "recommendations"},
+         "security": sec, "active": "recommendations",
+         "fixable_rules": fixers.human_titles_map()},
     )
 
 

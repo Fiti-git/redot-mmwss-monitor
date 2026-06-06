@@ -16,7 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import auth, filters
 from .config import get_settings
-from .routes import auth_routes, pages
+from .routes import api_routes, auth_routes, pages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -56,6 +56,7 @@ auth_routes.templates = templates
 # All routes registered with the /mmwss prefix
 app.include_router(auth_routes.router, prefix=BASE_PATH)
 app.include_router(pages.router, prefix=BASE_PATH)
+app.include_router(api_routes.router, prefix=BASE_PATH)
 
 
 @app.get("/healthz")
