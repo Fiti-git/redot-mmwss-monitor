@@ -86,6 +86,15 @@ def _env() -> Environment:
     env.filters["format_int"] = _fmt_int
     env.filters["human_bytes"] = _human_bytes
     env.filters["secs_to_human"] = _secs_to_human
+    # Embed the Redot logos as base64 globals so the HTML is fully self-contained
+    # (no external image paths needed for either browser viewing or WeasyPrint).
+    try:
+        from .templates import _assets_b64
+        env.globals["LOGO_ICON_DATA_URI"] = "data:image/png;base64," + _assets_b64.ICON_PNG_B64
+        env.globals["LOGO_WORDMARK_DATA_URI"] = "data:image/png;base64," + _assets_b64.WORDMARK_PNG_B64
+    except Exception:
+        env.globals["LOGO_ICON_DATA_URI"] = ""
+        env.globals["LOGO_WORDMARK_DATA_URI"] = ""
     return env
 
 
@@ -691,6 +700,8 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
+    stamp = start.strftime("%Y-%m-%d")
+
     ctx = {
         "company": "Redot Global",
         "product": "MMWSS",
@@ -698,6 +709,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         "title": title,
         "period_label": period_label,
         "generated_at": generated_at,
+        "stamp": stamp,
         "footer_left": f"MMWSS — {kind.title()} report · {period_label}",
         "stats": stats,
         "sites": sites,
