@@ -24,6 +24,8 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
+from . import credentials
+
 log = logging.getLogger(__name__)
 
 
@@ -52,27 +54,49 @@ METRICS_TO_PULL = [
 ]
 
 
-def _have_credentials() -> bool:
-    return bool(
-        os.environ.get("MMWSS_AWS_ACCESS_KEY_ID")
-        and os.environ.get("MMWSS_AWS_SECRET_ACCESS_KEY")
-    )
+def _resolve_aws_creds(conn, settings) -> dict | None:
+    """Pull AWS creds from the encrypted credentials store (with env fallback).
+    Returns {'access_key_id', 'secret_access_key', 'region'} or None if missing.
+    """
+    if conn is None:
+        # Bootstrap path (no DB yet) — env only
+        ak = os.environ.get("MMWSS_AWS_ACCESS_KEY_ID")
+        sk = os.environ.get("MMWSS_AWS_SECRET_ACCESS_KEY")
+        if not (ak and sk):
+            return None
+        return {
+            "access_key_id": ak,
+            "secret_access_key": sk,
+            "region": os.environ.get("MMWSS_AWS_DEFAULT_REGION", "ap-southeast-1"),
+        }
+
+    ak = credentials.get(conn, "aws_access_key_id", settings=settings)
+    sk = credentials.get(conn, "aws_secret_access_key", settings=settings)
+    region = credentials.get(conn, "aws_region", settings=settings) \
+             or os.environ.get("MMWSS_AWS_DEFAULT_REGION", "ap-southeast-1")
+    if not (ak and sk):
+        return None
+    return {"access_key_id": ak, "secret_access_key": sk, "region": region}
 
 
-def _client():
-    """Lazy boto3 client construction. Raises ImportError clearly if boto3
-    isn't installed yet (we install it in the image)."""
+def _client(conn, settings):
+    """Lazy boto3 client construction. Raises if creds aren't available."""
     try:
         import boto3
     except ImportError as e:
         raise RuntimeError(
             "boto3 not installed. Add to requirements: boto3==1.35.83"
         ) from e
+
+    creds = _resolve_aws_creds(conn, settings)
+    if not creds:
+        raise RuntimeError("AWS credentials not configured (DB nor env)")
+
     return boto3.client(
         "lightsail",
-        region_name=os.environ.get("MMWSS_AWS_DEFAULT_REGION", "ap-southeast-1"),
-        aws_access_key_id=os.environ["MMWSS_AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["MMWSS_AWS_SECRET_ACCESS_KEY"],
+        region_name=creds["region"],
+        aws_access_key_id=creds["access_key_id"],
+        aws_secret_access_key=creds["secret_access_key"],
     )
 
 
@@ -100,12 +124,12 @@ def sync_instances(settings, conn) -> int:
     """Upsert every Lightsail instance into mmwss.lightsail_instances.
     Returns count synced (0 if credentials missing).
     """
-    if not _have_credentials():
-        log.info("MMWSS_AWS_* credentials not set — skipping Lightsail sync")
+    if not _resolve_aws_creds(conn, settings):
+        log.info("AWS credentials not configured (DB nor env) — skipping Lightsail sync")
         return 0
 
     try:
-        ls = _client()
+        ls = _client(conn, settings)
     except Exception:
         log.exception("Failed to construct Lightsail client")
         return 0
@@ -193,12 +217,12 @@ def sync_instances(settings, conn) -> int:
 def pull_metrics(settings, conn) -> int:
     """For every running Lightsail instance, pull the last full hour of
     Lightsail-native metrics. Upserts one row per (instance, hour)."""
-    if not _have_credentials():
-        log.info("MMWSS_AWS_* credentials not set — skipping Lightsail metrics")
+    if not _resolve_aws_creds(conn, settings):
+        log.info("AWS credentials not configured (DB nor env) — skipping Lightsail metrics")
         return 0
 
     try:
-        ls = _client()
+        ls = _client(conn, settings)
     except Exception:
         log.exception("Failed to construct Lightsail client")
         return 0

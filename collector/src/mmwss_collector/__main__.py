@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, aws_lightsail, backup, db, jobs, reports, scan_jobs
+from . import alerts, aws_lightsail, backup, credentials, db, jobs, reports, scan_jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -184,6 +184,52 @@ def cmd_wp_check(settings) -> int:
     return 0
 
 
+def cmd_credentials(settings) -> int:
+    """Credential management.
+
+    Usage:
+        collector credentials list                       — show all (no values)
+        collector credentials import-from-env            — encrypt env-vars into DB
+        collector credentials honeytoken-alerts          — list any tripped honeytokens
+        collector credentials set <kind> <label> <val>   — store a new credential
+    """
+    sub = sys.argv[2] if len(sys.argv) > 2 else "list"
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        if sub == "list":
+            rows = credentials.list_all(conn)
+            print(f"{'KIND':28s} {'LABEL':20s} {'LAST4':8s} {'ACTIVE':6s} {'HONEY':6s} {'USES':6s} LAST USED")
+            for r in rows:
+                print(f"{r['kind']:28s} {r['label']:20s} {(r['last_4'] or '----'):8s} "
+                      f"{'yes' if r['is_active'] else 'no':6s} "
+                      f"{'YES' if r['is_honeytoken'] else 'no':6s} "
+                      f"{r['use_count']:6d} {r['last_used_at'] or '-'}")
+        elif sub == "import-from-env":
+            n = credentials.import_from_env(conn, settings)
+            print(f"Imported {n} credentials from env into encrypted DB.")
+        elif sub == "honeytoken-alerts":
+            alerts = credentials.honeytoken_alerts(conn)
+            if not alerts:
+                print("No honeytoken activity. ✅")
+            else:
+                print("🚨 HONEYTOKEN USED — BREACH SIGNAL:")
+                for a in alerts:
+                    print(f"  id={a['id']} kind={a['kind']} label={a['label']} "
+                          f"used={a['use_count']}x last_at={a['last_used_at']}")
+            return 1 if alerts else 0
+        elif sub == "set":
+            if len(sys.argv) < 6:
+                log.error("Usage: collector credentials set <kind> <label> <value>")
+                return 2
+            kind, label, value = sys.argv[3], sys.argv[4], sys.argv[5]
+            cid = credentials.set(conn, kind, label, value, settings=settings)
+            print(f"Stored credential id={cid} ({kind}/{label})")
+        else:
+            log.error("Unknown subcommand: %r. Try: list | import-from-env | honeytoken-alerts | set", sub)
+            return 2
+    return 0
+
+
 def cmd_lightsail(settings) -> int:
     """Catalogue Lightsail instances + pull current-hour metrics on demand."""
     kind = sys.argv[2] if len(sys.argv) > 2 else "all"
@@ -241,6 +287,7 @@ COMMANDS = {
     "scan": cmd_scan,
     "backup": cmd_backup,
     "lightsail": cmd_lightsail,
+    "credentials": cmd_credentials,
 }
 
 
