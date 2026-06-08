@@ -1,0 +1,11 @@
+# SOPS config — every encrypted file in this repo is encrypted to this age public key.
+# The matching PRIVATE key lives ONLY at /etc/mmwss/age.key on callora (chmod 400,
+# root-owned) and as an offline backup. Anyone with the private key can decrypt all
+# secrets in the repo; protect it accordingly.
+#
+# To rotate the key: generate new key, sops updatekeys secrets.enc.yaml, deploy.
+creation_rules:
+  - path_regex: secrets\.enc\.ya?ml$
+    age: age1was3q32s5xsemt2gt4kpnf8rglw696qpfd3xxalrp8adhzwfns4sqnhafu
+  - path_regex: ops/secrets/.*\.enc\.ya?ml$
+    age: age1was3q32s5xsemt2gt4kpnf8rglw696qpfd3xxalrp8adhzwfns4sqnhafu
