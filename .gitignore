@@ -2,11 +2,15 @@
 .env
 .env.*
 !.env.example
-secrets/
+/secrets/                            # root-level secrets dir (deliberately broad)
+ops/secrets/secrets.yaml             # plaintext intermediate — never commit
+ops/secrets/*.dec.yaml               # any decrypted output
+# ops/secrets/secrets.enc.yaml is SOPS-encrypted and SAFE to commit (it lives here on purpose)
 *.pem
 *.key
 *.crt
 *.pfx
+age.key                              # SOPS age private keys — NEVER in git
 cookies.txt
 credentials.json
 service-account*.json
