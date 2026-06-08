@@ -2,43 +2,93 @@
 {% block title %}Uptime — MMWSS{% endblock %}
 
 {% block app_main %}
-<div class="space-y-5 max-w-[1400px]">
+<div class="space-y-5 max-w-[1500px]">
   <div>
     <h1 class="text-[24px] font-bold text-ink tracking-tight">Uptime</h1>
-    <p class="text-[13.5px] text-ink-muted mt-1">Last 24 hours — origin probed every 60 seconds.</p>
+    <p class="text-[13.5px] text-ink-muted mt-1">Last 24 hours. Edge probe runs every 60 seconds from Singapore. Origin server metrics pulled hourly from AWS Lightsail.</p>
   </div>
+
+  <div class="bg-info-soft border border-info/20 rounded-xl2 p-4 text-[12px] text-ink">
+    <div class="font-semibold text-info-dark mb-1">Two-layer correlation</div>
+    The <strong>Edge</strong> column is what visitors experience (our outside HTTPS probe). The <strong>Origin (AWS)</strong> columns show what the server is actually doing. Discrepancies tell you the root cause: edge-down + AWS-OK = network/CF/WP issue · edge-down + AWS-fail = server problem · edge-OK + AWS-high-CPU = warning signal before slowdown.
+  </div>
+
   <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
     <table class="w-full">
       <thead class="bg-surface-sunken">
-        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
-          <th class="text-left px-6 py-3">Site</th>
-          <th class="text-left px-6 py-3">Current</th>
-          <th class="text-right px-6 py-3">Uptime %</th>
-          <th class="text-right px-6 py-3">Avg latency</th>
-          <th class="text-right px-6 py-3">Probes (ok / total)</th>
+        <tr class="text-[10.5px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left  px-5 py-3" colspan="4" style="border-right:1px solid #E5E7EB;">Edge — our HTTPS probe</th>
+          <th class="text-left  px-5 py-3" colspan="4">Origin — AWS Lightsail</th>
+        </tr>
+        <tr class="text-[10.5px] uppercase tracking-[0.06em] text-ink-muted font-semibold border-t border-line">
+          <th class="text-left  px-5 py-3">Site</th>
+          <th class="text-left  px-5 py-3">Current</th>
+          <th class="text-right px-5 py-3">Uptime 24h</th>
+          <th class="text-right px-5 py-3" style="border-right:1px solid #E5E7EB;">Latency · Probes</th>
+          <th class="text-left  px-5 py-3">Server</th>
+          <th class="text-left  px-5 py-3">Status check</th>
+          <th class="text-right px-5 py-3">CPU now</th>
+          <th class="text-right px-5 py-3">Burst</th>
         </tr>
       </thead>
       <tbody>
         {% for s in summaries %}
         {% set pct = (s.ok / s.total * 100) if s.total else None %}
         <tr class="border-t border-line hover:bg-surface-sunken">
-          <td class="px-6 py-3.5"><a href="{{ base_path }}/zones/{{ s.id }}" class="text-ink font-semibold text-[14px] hover:text-brand">{{ s.name }}</a></td>
-          <td class="px-6 py-3.5">
+          <td class="px-5 py-3.5"><a href="{{ base_path }}/zones/{{ s.id }}" class="text-ink font-semibold text-[13.5px] hover:text-brand">{{ s.name }}</a></td>
+          <td class="px-5 py-3.5">
             {% if s.latest_ok is none %}
-            <span class="inline-flex items-center gap-1.5 text-[12px] text-ink-subtle"><span class="w-1.5 h-1.5 rounded-full bg-ink-subtle"></span>no data</span>
+              <span class="inline-flex items-center gap-1.5 text-[12px] text-ink-subtle"><span class="w-1.5 h-1.5 rounded-full bg-ink-subtle"></span>no data</span>
             {% elif s.latest_ok %}
-            <span class="inline-flex items-center gap-1.5 text-[12px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>healthy · {{ s.latest_status }}</span>
+              <span class="inline-flex items-center gap-1.5 text-[12px] text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>healthy · {{ s.latest_status }}</span>
             {% else %}
-            <span class="inline-flex items-center gap-1.5 text-[12px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></span>down</span>
+              <span class="inline-flex items-center gap-1.5 text-[12px] text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></span>down</span>
             {% endif %}
           </td>
-          <td class="px-6 py-3.5 text-[13.5px] text-right tabular font-semibold {{ 'text-ok' if pct and pct >= 99.9 else ('text-warn' if pct and pct >= 99 else ('text-danger' if pct else 'text-ink-subtle')) }}">{% if pct is not none %}{{ pct | fmt_pct(2) }}{% else %}—{% endif %}</td>
-          <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink-muted">{% if s.avg_latency %}{{ s.avg_latency | round | int }} ms{% else %}—{% endif %}</td>
-          <td class="px-6 py-3.5 text-[13px] text-right tabular text-ink-muted">{{ s.ok }} / {{ s.total }}</td>
+          <td class="px-5 py-3.5 text-[13.5px] text-right tabular font-semibold {{ 'text-ok' if pct and pct >= 99.9 else ('text-warn' if pct and pct >= 99 else ('text-danger' if pct else 'text-ink-subtle')) }}">{% if pct is not none %}{{ pct | fmt_pct(2) }}{% else %}—{% endif %}</td>
+          <td class="px-5 py-3.5 text-[12px] text-right tabular text-ink-muted" style="border-right:1px solid #E5E7EB;">{% if s.avg_latency %}{{ s.avg_latency | round | int }} ms{% else %}—{% endif %} · {{ s.ok }}/{{ s.total }}</td>
+
+          {# ─── AWS columns ─── #}
+          <td class="px-5 py-3.5 text-[12px]">
+            {% if not s.aws_instance %}
+              <span class="text-ink-subtle italic">no mapping</span>
+            {% elif s.aws_state == 'running' %}
+              <span class="inline-flex items-center gap-1.5 text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>running</span>
+              <div class="text-[10.5px] text-ink-subtle mt-0.5">{{ s.aws_ram_gb }}GB · {{ s.aws_bundle }}</div>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger"></span>{{ s.aws_state or '?' }}</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3.5 text-[12px]">
+            {% if s.aws_status_failed is none %}
+              <span class="text-ink-subtle">—</span>
+            {% elif s.aws_status_failed == 0 %}
+              <span class="inline-flex items-center gap-1.5 text-ok-dark font-medium"><span class="w-1.5 h-1.5 rounded-full bg-ok"></span>passing</span>
+            {% else %}
+              <span class="inline-flex items-center gap-1.5 text-danger font-semibold"><span class="w-1.5 h-1.5 rounded-full bg-danger animate-pulse"></span>{{ s.aws_status_failed }} fail{{ '' if s.aws_status_failed == 1 else 's' }}</span>
+            {% endif %}
+          </td>
+          <td class="px-5 py-3.5 text-[12px] text-right tabular">
+            {% if s.aws_cpu_avg is not none %}
+              {% set cpu = s.aws_cpu_avg | float %}
+              {% set cls = 'text-danger font-semibold' if cpu >= 80 else ('text-warn-dark' if cpu >= 60 else 'text-ink') %}
+              <span class="{{ cls }}">{{ '%.0f' % cpu }}%</span>
+              {% if s.aws_cpu_max %}<div class="text-[10.5px] text-ink-subtle">peak {{ '%.0f' % s.aws_cpu_max }}%</div>{% endif %}
+            {% else %}<span class="text-ink-subtle">—</span>{% endif %}
+          </td>
+          <td class="px-5 py-3.5 text-[12px] text-right tabular">
+            {% if s.aws_burst_pct is not none %}
+              {% set bp = s.aws_burst_pct | float %}
+              {% set bcls = 'text-danger font-semibold' if bp < 25 else ('text-warn-dark' if bp < 50 else 'text-ink-muted') %}
+              <span class="{{ bcls }}">{{ '%.0f' % bp }}%</span>
+            {% else %}<span class="text-ink-subtle">—</span>{% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <p class="text-[11px] text-ink-subtle">Edge probe latency includes the round-trip Singapore → Cloudflare edge → origin → back. AWS metrics are pulled from Lightsail's GetInstanceMetricData with a read-only IAM user. Burst credit shows remaining CPU bursting budget (Lightsail throttles when this drops below ~20%).</p>
 </div>
 {% endblock %}

@@ -220,7 +220,12 @@ def zone_incidents(zone_id: int, limit: int = 20) -> list[dict]:
 
 
 def uptime_summary_all() -> list[dict]:
-    """Per-zone 24h uptime summary for the /uptime page."""
+    """Per-zone 24h uptime summary for the /uptime page.
+
+    Joined with AWS Lightsail health so the page shows BOTH layers:
+    - our outside-the-front-door HTTPS probe (latest + 24h aggregate)
+    - AWS-side status check + CPU pressure from the latest hour's metric
+    """
     since = datetime.now(timezone.utc) - timedelta(hours=24)
     return db.fetch_all(
         """
@@ -237,16 +242,43 @@ def uptime_summary_all() -> list[dict]:
             SELECT DISTINCT ON (zone_id) zone_id, ok, status_code, checked_at
             FROM mmwss.uptime_checks
             ORDER BY zone_id, checked_at DESC
+        ),
+        latest_lightsail AS (
+            -- Latest hour's metric per zone (via the instance mapped to that zone)
+            SELECT DISTINCT ON (i.zone_id)
+                   i.zone_id,
+                   i.name AS instance_name,
+                   i.bundle_id,
+                   i.ram_gb,
+                   i.state AS aws_state,
+                   m.cpu_avg, m.cpu_max,
+                   m.status_check_failed,
+                   m.burst_capacity_pct,
+                   m.hour AS metric_hour
+              FROM mmwss.lightsail_instances i
+              LEFT JOIN mmwss.lightsail_metrics_hourly m ON m.instance_id = i.id
+             WHERE i.zone_id IS NOT NULL
+             ORDER BY i.zone_id, m.hour DESC NULLS LAST
         )
         SELECT z.id, z.name,
                COALESCE(s.total, 0) AS total,
                COALESCE(s.ok, 0)    AS ok,
                s.avg_latency,
                l.ok AS latest_ok,
-               l.status_code AS latest_status
+               l.status_code AS latest_status,
+               ll.instance_name AS aws_instance,
+               ll.bundle_id     AS aws_bundle,
+               ll.ram_gb        AS aws_ram_gb,
+               ll.aws_state,
+               ll.cpu_avg       AS aws_cpu_avg,
+               ll.cpu_max       AS aws_cpu_max,
+               ll.status_check_failed AS aws_status_failed,
+               ll.burst_capacity_pct  AS aws_burst_pct,
+               ll.metric_hour   AS aws_metric_hour
         FROM mmwss.zones z
         LEFT JOIN summary s ON s.zone_id = z.id
         LEFT JOIN latest  l ON l.zone_id = z.id
+        LEFT JOIN latest_lightsail ll ON ll.zone_id = z.id
         WHERE z.status = 'active'
         ORDER BY z.name
         """,

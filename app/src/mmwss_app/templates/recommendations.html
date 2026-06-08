@@ -14,7 +14,6 @@
 
 {% macro rec_card(r) %}
 {% set border = 'border-l-danger' if r.severity == 'critical' else ('border-l-warn' if r.severity == 'warning' else 'border-l-info') %}
-{% set fixable = r.rule_id in fixable_rules %}
 <div class="bg-white border border-line border-l-4 {{ border }} rounded-r-lg p-4 mb-2.5 shadow-card">
   <div class="flex items-start justify-between gap-3 mb-1.5">
     <div class="flex items-center gap-2 flex-wrap">
@@ -26,21 +25,11 @@
   </div>
   <div class="text-[13.5px] font-semibold text-ink mb-1">{{ r.title }}</div>
   <div class="text-[12.5px] text-ink-muted leading-relaxed">{{ r.body }}</div>
-  {% if fixable and user.role == 'admin' %}
-  <div class="mt-3 flex items-center gap-3">
-    <button type="button"
-            class="mmwss-fix-btn inline-flex items-center gap-1.5 h-7 px-3 bg-brand hover:bg-brand-600 active:bg-brand-700 text-white font-semibold text-[11.5px] rounded-md shadow-card transition-colors"
-            data-zone-id="{{ r.zone_id }}"
-            data-rule-id="{{ r.rule_id }}"
-            data-zone-name="{{ r.zone_name }}"
-            data-rule-title="{{ r.title }}"
-            data-action="{{ fixable_rules[r.rule_id] }}">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="w-3 h-3">
-        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
-      </svg>
-      One-click fix
-    </button>
-    <span class="text-[11px] text-ink-muted">{{ fixable_rules[r.rule_id] }} via Cloudflare</span>
+  {% if r.rule_id in fixable_rules %}
+  <div class="mt-3 text-[11.5px] text-ink-muted bg-surface-alt border border-line rounded-md px-3 py-2">
+    <span class="font-semibold text-ink-muted uppercase tracking-wider text-[10px]">Suggested action</span>
+    <span class="ml-1">{{ fixable_rules[r.rule_id] }} via Cloudflare</span>
+    <span class="ml-2 text-ink-subtle">— record in the <a href="{{ base_path }}/change-log/new" class="text-brand hover:underline">change log</a> after applying.</span>
   </div>
   {% endif %}
 </div>
@@ -120,8 +109,8 @@
   {% endif %}
 </div>
 
-{% if user.role == 'admin' %}
-<!-- Fix confirmation modal -->
+{% if False %}
+<!-- Fix confirmation modal — DISABLED: fixes are now applied manually outside the platform and recorded in the change log -->
 <div id="fix-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background:rgba(15,23,42,0.55)">
   <div class="bg-white rounded-xl2 shadow-pop max-w-md w-full">
     <div class="px-5 py-4 border-b border-line flex items-center gap-2">
