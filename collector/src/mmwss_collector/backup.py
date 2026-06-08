@@ -28,9 +28,14 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-
 log = logging.getLogger(__name__)
+
+
+def _aesgcm(key: bytes):
+    """Lazy import so module-load doesn't fail when cryptography isn't yet
+    installed in the image. We always import it before use."""
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    return AESGCM(key)
 
 BACKUP_DIR = Path(os.environ.get("MMWSS_BACKUPS_DIR", "/app/reports/backups"))
 RETENTION_DAYS = int(os.environ.get("BACKUP_RETENTION_DAYS", "30"))
@@ -156,7 +161,7 @@ def run_backup(settings, conn) -> dict:
 
         # AES-256-GCM encrypt with master key
         key = _master_key_bytes(settings.mmwss_master_key)
-        aesgcm = AESGCM(key)
+        aesgcm = _aesgcm(key)
         nonce = os.urandom(12)
         plaintext = tmp_gz.read_bytes()
         ciphertext = aesgcm.encrypt(nonce, plaintext, associated_data=b"mmwss-backup-v1")
@@ -237,7 +242,7 @@ def restore_backup(settings, encrypted_path: Path, target_db_url: str) -> None:
         raise ValueError("Not a valid MMWSS backup file (bad magic/version)")
     nonce, ciphertext = blob[5:17], blob[17:]
     key = _master_key_bytes(settings.mmwss_master_key)
-    plaintext = AESGCM(key).decrypt(nonce, ciphertext, associated_data=b"mmwss-backup-v1")
+    plaintext = _aesgcm(key).decrypt(nonce, ciphertext, associated_data=b"mmwss-backup-v1")
     tmp_gz = encrypted_path.with_suffix(".restore.gz")
     tmp_sql = encrypted_path.with_suffix(".restore.sql")
     tmp_gz.write_bytes(plaintext)
