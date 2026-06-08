@@ -563,9 +563,11 @@ table.up td { padding: 9px 0; vertical-align: middle; }
 {% set show_recs        = (recommendations | length > 0) and (is_weekly or is_monthly) %}
 {% set show_wp          = (wp_findings | length > 0) %}
 {% set show_summary     = is_monthly %}
+{% set show_origin      = (is_weekly or is_monthly) and (lightsail_summary | length > 0) %}
 
 {% set total_pages = 2 %}
 {% if show_sla %}{% set total_pages = total_pages + 1 %}{% endif %}
+{% if show_origin %}{% set total_pages = total_pages + 1 %}{% endif %}
 {% if show_changes or show_vapt_matrix %}{% set total_pages = total_pages + 1 %}{% endif %}
 {% if show_scanner or show_recs %}{% set total_pages = total_pages + 1 %}{% endif %}
 {% if show_wp or show_summary %}{% set total_pages = total_pages + 1 %}{% endif %}
@@ -783,7 +785,78 @@ table.up td { padding: 9px 0; vertical-align: middle; }
 </div>
 {% endif %}
 
-{# ───────── PAGE 4 — CHANGES + VAPT MATRIX ───────── #}
+{# ───────── PAGE — ORIGIN SERVER HEALTH ───────── #}
+{% if show_origin %}
+<div class="page">
+  {{ head() }}
+
+  <div class="block">
+    <table class="minihead"><tr>
+      <td class="idx">04</td>
+      <td>Origin server health</td>
+      <td class="note">AWS Lightsail · {{ lightsail_summary | length }} instances</td>
+    </tr></table>
+    <table class="tbl">
+      <colgroup>
+        <col style="width:24%"><col style="width:14%"><col><col><col><col><col style="width:14%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>Site / Instance</th>
+          <th>Bundle</th>
+          <th class="num">RAM</th>
+          <th class="num">CPU avg</th>
+          <th class="num">CPU peak</th>
+          <th class="num">Burst floor</th>
+          <th class="ctr">Sizing</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in lightsail_summary %}
+        <tr>
+          <td>
+            <span class="kw">{{ r.zone_name or 'staging / unmapped' }}</span>
+            <br/><span class="url">{{ r.name }}</span>
+          </td>
+          <td class="url">{{ r.bundle_id }}</td>
+          <td class="num">{{ r.ram_gb }} GB</td>
+          <td class="num">{% if r.samples > 0 %}{{ '%.1f' % r.cpu_avg }}%{% else %}—{% endif %}</td>
+          <td class="num">{% if r.samples > 0 %}{{ '%.1f' % r.cpu_peak }}%{% else %}—{% endif %}</td>
+          <td class="num">{% if r.samples > 0 %}{{ '%.0f' % r.burst_min }}%{% else %}—{% endif %}</td>
+          <td class="ctr">
+            {% set ram = (r.ram_gb or 0) | float %}
+            {% if ram <= 1.5 %}<span class="tag bad">Undersized</span>
+            {% elif ram <= 2.5 %}<span class="tag warn">Tight</span>
+            {% elif ram <= 8.5 %}<span class="tag good">Adequate</span>
+            {% else %}<span class="tag good">Comfortable</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="src-note">CPU avg / peak / burst-floor computed over the reporting period from AWS Lightsail's GetInstanceMetricData. Sizing verdict reflects WordPress typical-workload heuristics — instances marked "Undersized" usually swap-thrash under traffic spikes.</p>
+  </div>
+
+  {# Sizing-recommendation callouts for problematic instances #}
+  {% set undersized = lightsail_summary | selectattr('ram_gb', 'le', 2.0) | list %}
+  {% if undersized %}
+  <div class="block">
+    <div class="panel" style="background:#FCE9EA; border-color:#E11B22;">
+      <div class="kpi__label" style="color:#B3141A; margin-bottom:6px">Sizing recommendation</div>
+      <p style="font-size:10px; line-height:1.55; color:#18191B; margin:0;">
+        {% for r in undersized %}
+          <strong>{{ r.zone_name or r.name }}</strong> runs on the <span style="font-family:'IBM Plex Mono', monospace">{{ r.bundle_id }}</span> bundle ({{ r.ram_gb }} GB RAM, {{ r.vcpu }} vCPU). Under WordPress workload this tier is prone to memory pressure and CPU credit exhaustion — recommend upgrade to a Medium (4 GB) bundle or larger.{% if not loop.last %}<br/>{% endif %}
+        {% endfor %}
+      </p>
+    </div>
+  </div>
+  {% endif %}
+
+  {{ foot(3 + (1 if show_sla else 0)) }}
+</div>
+{% endif %}
+
+{# ───────── PAGE — CHANGES + VAPT MATRIX ───────── #}
 {% if show_changes or show_vapt_matrix %}
 <div class="page">
   {{ head() }}
@@ -893,7 +966,7 @@ table.up td { padding: 9px 0; vertical-align: middle; }
   </div>
   {% endif %}
 
-  {{ foot(3 + (1 if show_sla else 0)) }}
+  {{ foot(3 + (1 if show_sla else 0) + (1 if show_origin else 0)) }}
 </div>
 {% endif %}
 
@@ -961,7 +1034,7 @@ table.up td { padding: 9px 0; vertical-align: middle; }
   </div>
   {% endif %}
 
-  {{ foot(3 + (1 if show_sla else 0) + (1 if show_changes or show_vapt_matrix else 0)) }}
+  {{ foot(3 + (1 if show_sla else 0) + (1 if show_origin else 0) + (1 if show_changes or show_vapt_matrix else 0)) }}
 </div>
 {% endif %}
 

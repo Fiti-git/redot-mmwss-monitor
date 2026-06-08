@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, backup, db, jobs, reports, scan_jobs
+from . import alerts, aws_lightsail, backup, db, jobs, reports, scan_jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -132,6 +132,16 @@ def cmd_scheduler(settings) -> int:
                   CronTrigger(hour=23, minute=30), id="backup_daily",
                   max_instances=1, coalesce=True)
 
+    # ───── AWS Lightsail (MMWSS origin servers) ─────
+    # Catalogue refresh at 02:30 UTC daily (instance metadata changes rarely).
+    # Metric pull every hour at :15 — well clear of analytics (:05) and snapshots (:10).
+    sched.add_job(_wrap(aws_lightsail.sync_instances, settings, "lightsail_sync"),
+                  CronTrigger(hour=2, minute=30), id="lightsail_sync",
+                  max_instances=1, coalesce=True)
+    sched.add_job(_wrap(aws_lightsail.pull_metrics, settings, "lightsail_metrics"),
+                  CronTrigger(minute=15), id="lightsail_metrics",
+                  max_instances=1, coalesce=True)
+
     log.info("Scheduler running. Jobs: uptime/60s, analytics/hourly, snapshot/6h, zone_sync/daily, "
              "report_daily/weekly/monthly, scan_headers+surface/daily, scan_nuclei+wpscan+testssl+zap/weekly, "
              "backup_daily/23:30 UTC")
@@ -171,6 +181,18 @@ def cmd_wp_check(settings) -> int:
         db.apply_pending_migrations(conn)
         n = jobs.run_wp_checks(settings, conn)
     log.info("WP checks complete: %d zones probed", n)
+    return 0
+
+
+def cmd_lightsail(settings) -> int:
+    """Catalogue Lightsail instances + pull current-hour metrics on demand."""
+    kind = sys.argv[2] if len(sys.argv) > 2 else "all"
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        if kind in ("sync", "all"):
+            aws_lightsail.sync_instances(settings, conn)
+        if kind in ("metrics", "all"):
+            aws_lightsail.pull_metrics(settings, conn)
     return 0
 
 
@@ -218,6 +240,7 @@ COMMANDS = {
     "wp_check": cmd_wp_check,
     "scan": cmd_scan,
     "backup": cmd_backup,
+    "lightsail": cmd_lightsail,
 }
 
 

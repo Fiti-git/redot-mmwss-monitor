@@ -1,0 +1,76 @@
+{% extends "_app_shell.html" %}
+{% block title %}{{ inst.name }} — Origin health — MMWSS{% endblock %}
+
+{% macro bytes(b) %}{% if not b %}—{% elif b >= 1073741824 %}{{ '%.2f' % (b / 1073741824) }} GB{% elif b >= 1048576 %}{{ '%.1f' % (b / 1048576) }} MB{% elif b >= 1024 %}{{ '%.0f' % (b / 1024) }} KB{% else %}{{ b }} B{% endif %}{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1400px]">
+  <div>
+    <div class="text-[12px] text-ink-muted mb-1">
+      <a href="{{ base_path }}/origin-health" class="hover:text-brand">Origin health</a> / {{ inst.name }}
+    </div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">{{ inst.name }}</h1>
+    <div class="text-[12.5px] text-ink-muted mt-1">
+      {% if inst.zone_name %}Serves <a href="{{ base_path }}/zones/{{ inst.zone_id }}" class="text-brand font-semibold hover:underline">{{ inst.zone_name }}</a> · {% endif %}
+      Lightsail · {{ inst.availability_zone }} · {{ inst.public_ip }}
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">Bundle</div>
+      <div class="text-[14px] font-semibold text-ink mt-1">{{ inst.bundle_label }}</div>
+      <div class="text-[11px] text-ink-subtle mt-0.5">{{ inst.bundle_id }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">Hardware</div>
+      <div class="text-[14px] font-semibold text-ink mt-1 font-mono">{{ inst.ram_gb }}GB · {{ inst.vcpu }}vCPU</div>
+      <div class="text-[11px] text-ink-subtle mt-0.5">{{ inst.disk_gb or '?' }}GB SSD</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">CPU (latest hour)</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{% if inst.cpu_avg is not none %}{{ '%.0f' % inst.cpu_avg }}<span class="text-[12px] text-ink-muted">%</span>{% else %}—{% endif %}</div>
+      <div class="text-[11px] text-ink-subtle mt-0.5">peak {{ '%.0f' % inst.cpu_max if inst.cpu_max is not none else '—' }}%</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[10px] uppercase tracking-wide text-ink-muted font-semibold">Burst credit</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if (inst.burst_capacity_pct or 100) < 25 else ('warn-dark' if (inst.burst_capacity_pct or 100) < 50 else 'ink') }}">{% if inst.burst_capacity_pct is not none %}{{ '%.0f' % inst.burst_capacity_pct }}<span class="text-[12px] text-ink-muted">%</span>{% else %}—{% endif %}</div>
+      <div class="text-[11px] text-ink-subtle mt-0.5">{% if inst.burst_capacity_secs %}{{ (inst.burst_capacity_secs // 60) }} min remaining{% endif %}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line">
+      <h2 class="text-[15px] font-semibold text-ink">Last 24 hours</h2>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Hour</th>
+          <th class="text-right px-5 py-3">CPU avg</th>
+          <th class="text-right px-5 py-3">CPU max</th>
+          <th class="text-right px-5 py-3">Net in</th>
+          <th class="text-right px-5 py-3">Net out</th>
+          <th class="text-right px-5 py-3">Burst %</th>
+          <th class="text-right px-5 py-3">Status fails</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for h in history %}
+        <tr class="border-t border-line">
+          <td class="px-5 py-3 text-[12px] font-mono text-ink-muted">{{ h.hour | datetime_str }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular">{% if h.cpu_avg is not none %}{{ '%.1f' % h.cpu_avg }}%{% else %}—{% endif %}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'danger' if (h.cpu_max or 0) > 80 else 'ink' }}">{% if h.cpu_max is not none %}{{ '%.1f' % h.cpu_max }}%{% else %}—{% endif %}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-ink-muted font-mono">{{ bytes(h.network_in_bytes) }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-ink-muted font-mono">{{ bytes(h.network_out_bytes) }}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular">{% if h.burst_capacity_pct is not none %}{{ '%.0f' % h.burst_capacity_pct }}%{% else %}—{% endif %}</td>
+          <td class="px-5 py-3 text-[12px] text-right tabular text-{{ 'danger' if (h.status_check_failed or 0) > 0 else 'ink-muted' }}">{{ h.status_check_failed or 0 }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="px-5 py-10 text-center text-ink-muted text-[13px]">No metrics yet. The hourly pull runs at :15 past each hour.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

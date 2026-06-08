@@ -1,0 +1,119 @@
+{% extends "_app_shell.html" %}
+{% block title %}Origin server health — MMWSS{% endblock %}
+
+{% macro verdict_chip(v) %}
+{% if v == 'undersized' %}<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-danger-soft text-danger-dark">undersized</span>
+{% elif v == 'tight' %}<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-warn-soft text-warn-dark">tight</span>
+{% elif v == 'adequate' %}<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-info-soft text-info-dark">adequate</span>
+{% elif v == 'comfortable' %}<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-ok-soft text-ok-dark">comfortable</span>
+{% else %}<span class="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-surface-sunken text-ink-muted">{{ v }}</span>{% endif %}
+{% endmacro %}
+
+{% macro cpu_bar(pct) %}
+{% set p = (pct or 0) | float %}
+{% set cls = 'bg-danger' if p >= 80 else ('bg-warn' if p >= 60 else ('bg-info' if p >= 30 else 'bg-ok')) %}
+<div class="flex items-center gap-1.5">
+  <div class="w-16 h-1.5 bg-surface-sunken rounded-full overflow-hidden">
+    <div class="h-full {{ cls }}" style="width: {{ p }}%"></div>
+  </div>
+  <span class="text-[11px] tabular text-ink-muted">{{ '%.0f' % p }}%</span>
+</div>
+{% endmacro %}
+
+{% macro bytes(b) %}{% if not b %}—{% elif b >= 1073741824 %}{{ '%.1f' % (b / 1073741824) }} GB{% elif b >= 1048576 %}{{ '%.0f' % (b / 1048576) }} MB{% elif b >= 1024 %}{{ '%.0f' % (b / 1024) }} KB{% else %}{{ b }} B{% endif %}{% endmacro %}
+
+{% block app_main %}
+<div class="space-y-5 max-w-[1500px]">
+  <div>
+    <h1 class="text-[24px] font-bold text-ink tracking-tight">Origin server health</h1>
+    <p class="text-[13.5px] text-ink-muted mt-1">
+      Live metrics from MMWSS's AWS Lightsail instances — the actual servers running each WordPress site. Pulled hourly from AWS read-only.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-4">
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Total instances</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.total or 0 }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Running</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ok-dark">{{ counters.running or 0 }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Mapped to zones</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-ink">{{ counters.mapped or 0 }}</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Undersized</div>
+      <div class="text-[22px] font-bold tabular mt-1 text-{{ 'danger' if (counters.undersized or 0) > 0 else 'ink' }}">{{ counters.undersized or 0 }}</div>
+      <div class="text-[10px] text-ink-subtle mt-0.5">nano / micro tiers</div>
+    </div>
+    <div class="bg-white border border-line rounded-xl2 p-4 shadow-card">
+      <div class="text-[11px] uppercase tracking-wide text-ink-muted font-semibold">Last metric</div>
+      <div class="text-[14px] font-semibold mt-1 text-ink-muted">{{ counters.last_metric | datetime_str if counters.last_metric else 'never' }}</div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-line rounded-xl2 shadow-card overflow-hidden">
+    <div class="px-5 py-3 border-b border-line">
+      <h2 class="text-[15px] font-semibold text-ink">Instances</h2>
+    </div>
+    <table class="w-full">
+      <thead class="bg-surface-sunken">
+        <tr class="text-[11px] uppercase tracking-[0.06em] text-ink-muted font-semibold">
+          <th class="text-left px-5 py-3">Instance</th>
+          <th class="text-left px-5 py-3">Site</th>
+          <th class="text-left px-5 py-3">Bundle</th>
+          <th class="text-left px-5 py-3">Spec</th>
+          <th class="text-left px-5 py-3">CPU (1h avg)</th>
+          <th class="text-right px-5 py-3">Net In</th>
+          <th class="text-right px-5 py-3">Net Out</th>
+          <th class="text-left px-5 py-3">Burst</th>
+          <th class="text-left px-5 py-3">State</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for i in instances %}
+        <tr class="border-t border-line hover:bg-surface-sunken">
+          <td class="px-5 py-3 text-[12.5px]">
+            <a href="{{ base_path }}/origin-health/{{ i.id }}" class="text-ink font-semibold hover:text-brand">{{ i.name }}</a>
+            <div class="text-[11px] font-mono text-ink-subtle">{{ i.public_ip or '' }}</div>
+          </td>
+          <td class="px-5 py-3 text-[12.5px] text-ink-muted">{{ i.zone_name or '—' }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            <div class="text-ink">{{ i.bundle_label }}</div>
+            <div class="mt-0.5">{{ verdict_chip(i.bundle_verdict) }}</div>
+          </td>
+          <td class="px-5 py-3 text-[12px] font-mono text-ink-muted">{{ i.ram_gb }}GB / {{ i.vcpu }}vCPU / {{ i.disk_gb or '?' }}GB</td>
+          <td class="px-5 py-3 text-[12px]">{% if i.cpu_avg is not none %}{{ cpu_bar(i.cpu_avg) }}{% else %}<span class="text-ink-subtle">—</span>{% endif %}</td>
+          <td class="px-5 py-3 text-[11.5px] font-mono text-right tabular text-ink-muted">{{ bytes(i.network_in_bytes) }}</td>
+          <td class="px-5 py-3 text-[11.5px] font-mono text-right tabular text-ink-muted">{{ bytes(i.network_out_bytes) }}</td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if i.burst_capacity_pct is not none %}
+              <span class="font-mono text-{{ 'danger' if i.burst_capacity_pct < 25 else ('warn-dark' if i.burst_capacity_pct < 50 else 'ink') }}">{{ '%.0f' % i.burst_capacity_pct }}%</span>
+            {% else %}<span class="text-ink-subtle">—</span>{% endif %}
+          </td>
+          <td class="px-5 py-3 text-[12px]">
+            {% if i.state == 'running' %}<span class="text-ok-dark font-semibold">●</span> running
+            {% else %}<span class="text-danger font-semibold">●</span> {{ i.state }}{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="px-5 py-14 text-center text-ink-muted text-[13px]">
+          <div class="inline-flex flex-col items-center gap-2">
+            <div class="font-medium text-ink">No Lightsail instances catalogued yet</div>
+            <div>Run the catalogue sync — first metric pull is at :15 past every hour.</div>
+          </div>
+        </td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-info-soft border border-info/20 rounded-xl2 p-4 text-[12.5px] text-ink">
+    <div class="font-semibold text-info-dark mb-1">About this data</div>
+    Pulled hourly from AWS Lightsail's <code class="font-mono text-[11.5px]">GetInstanceMetricData</code> API using a read-only IAM user (<code class="font-mono">mmwss-monitoring</code>) on MMWSS's AWS account. Bundle sizing verdict is based on Lightsail tier ↔ WordPress workload heuristics — instances flagged <strong>undersized</strong> typically swap-thrash under traffic. The instance ↔ site mapping is by name pattern.
+  </div>
+</div>
+{% endblock %}

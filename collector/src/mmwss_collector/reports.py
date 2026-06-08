@@ -511,6 +511,34 @@ def _uptime_per_site(conn, start, end) -> list[dict]:
     return rows
 
 
+def _lightsail_summary(conn, start, end) -> list[dict]:
+    """For each Lightsail instance, return peak/avg metrics over the period
+    plus a sizing verdict. Returns empty list if no data yet."""
+    return _qn(
+        conn,
+        """
+        SELECT i.id, i.name, i.bundle_id, i.ram_gb, i.vcpu, i.disk_gb,
+               i.state, i.zone_id, z.name AS zone_name,
+               COALESCE(AVG(m.cpu_avg), 0)::numeric(5,2)    AS cpu_avg,
+               COALESCE(MAX(m.cpu_max), 0)::numeric(5,2)    AS cpu_peak,
+               COALESCE(MIN(m.burst_capacity_pct), 100)::numeric(5,2) AS burst_min,
+               COALESCE(SUM(m.network_in_bytes), 0)::bigint  AS net_in,
+               COALESCE(SUM(m.network_out_bytes), 0)::bigint AS net_out,
+               COALESCE(SUM(m.status_check_failed), 0)::int  AS status_fails,
+               COUNT(m.hour)::int                            AS samples
+          FROM mmwss.lightsail_instances i
+          LEFT JOIN mmwss.lightsail_metrics_hourly m
+            ON m.instance_id = i.id
+            AND m.hour >= %s AND m.hour < %s
+          LEFT JOIN mmwss.zones z ON z.id = i.zone_id
+         WHERE i.state = 'running'
+         GROUP BY i.id, z.name
+         ORDER BY (i.zone_id IS NULL), i.name
+        """,
+        (start, end),
+    )
+
+
 def _scanner_summary(conn, start, end) -> dict:
     """Internal-scanner activity for the period: per-scanner runs, new findings,
     auto-verified findings, and per-severity / per-scanner open posture."""
@@ -684,6 +712,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
     vapt_summary   = _vapt_status_summary(conn, start, end)
     uptime_sites   = _uptime_per_site(conn, start, end)
     scanner_summary = _scanner_summary(conn, start, end)
+    lightsail_summary = _lightsail_summary(conn, start, end)
 
     # Bar-chart data: only sites with >0 threats, scaled to max=100
     max_threats = max((s["threats"] for s in sites), default=0)
@@ -725,6 +754,7 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         "change_by_cat":  change_by_cat,
         "vapt_summary":   vapt_summary,
         "scanner_summary": scanner_summary,
+        "lightsail_summary": lightsail_summary,
         "secs_to_human":  _secs_to_human,
     }
 
