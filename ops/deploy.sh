@@ -52,11 +52,16 @@ cd "${REPO_DIR}"
 git fetch --quiet
 git reset --hard origin/main
 
-echo "==> docker compose build"
-sudo ${COMPOSE} build
+# Optional rebuild — only when DEPLOY_BUILD=1 is set. Skip by default to
+# avoid running out of disk on the small VPS. Manual rebuild:
+#     DEPLOY_BUILD=1 sudo bash ops/deploy.sh
+if [[ "${DEPLOY_BUILD:-0}" == "1" ]]; then
+    echo "==> docker compose build (DEPLOY_BUILD=1)"
+    sudo ${COMPOSE} build
+fi
 
-echo "==> docker compose up -d"
-sudo ${COMPOSE} up -d
+echo "==> docker compose up -d --no-build (recreates with new env if any var changed)"
+sudo ${COMPOSE} up -d --no-build
 
 echo "==> Status:"
 sudo ${COMPOSE} ps
