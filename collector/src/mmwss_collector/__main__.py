@@ -13,7 +13,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from . import alerts, aws_lightsail, backup, credentials, db, jobs, reports, scan_jobs
+from . import alerts, aws_lightsail, backup, credentials, db, honeytokens, jobs, reports, scan_jobs
 from .config import load
 from .zone_sync import sync_all_zones
 
@@ -125,6 +125,11 @@ def cmd_scheduler(settings) -> int:
     sched.add_job(_wrap(scan_jobs.run_zap, settings, "scan_zap"),
                   CronTrigger(day_of_week="thu", hour=18, minute=0), id="scan_zap", max_instances=1, coalesce=True)
 
+    # ───── Honeytoken tripwire — every 15 min ─────
+    sched.add_job(_wrap(honeytokens.check, settings, "honeytoken_check"),
+                  IntervalTrigger(minutes=15), id="honeytoken_check",
+                  max_instances=1, coalesce=True)
+
     # ───── Daily encrypted DB backup ─────
     # 23:30 UTC = 07:30 SGT — runs just after the daily report so it captures
     # the freshly-generated row too.
@@ -181,6 +186,46 @@ def cmd_wp_check(settings) -> int:
         db.apply_pending_migrations(conn)
         n = jobs.run_wp_checks(settings, conn)
     log.info("WP checks complete: %d zones probed", n)
+    return 0
+
+
+def cmd_honeytokens(settings) -> int:
+    """Honeytoken management.
+
+    Usage:
+        collector honeytokens seed   — plant the standard set (idempotent)
+        collector honeytokens check  — run the tripwire check now
+        collector honeytokens list   — show active honeytokens
+    """
+    sub = sys.argv[2] if len(sys.argv) > 2 else "list"
+    with db.connect(settings.database_url) as conn:
+        db.apply_pending_migrations(conn)
+        if sub == "seed":
+            n = honeytokens.seed(conn, settings)
+            print(f"Seeded {n} honeytokens.")
+        elif sub == "check":
+            n = honeytokens.check(settings, conn)
+            print(f"Checked. {n} honeytoken(s) tripped." if n else "No honeytoken activity. ✅")
+            return 1 if n else 0
+        elif sub == "list":
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT kind, label, last_4, use_count, last_used_at "
+                    "FROM mmwss.credentials WHERE is_honeytoken = TRUE AND is_active = TRUE "
+                    "ORDER BY kind, label"
+                )
+                rows = cur.fetchall()
+            if not rows:
+                print("No honeytokens planted yet. Run: collector honeytokens seed")
+            else:
+                print(f"{'KIND':28s} {'LABEL':24s} {'LAST4':8s} {'USES':6s} TRIPPED AT")
+                for r in rows:
+                    tripped = r['last_used_at'] or '(not tripped — good)'
+                    print(f"{r['kind']:28s} {r['label']:24s} {(r['last_4'] or '----'):8s} "
+                          f"{r['use_count']:6d} {tripped}")
+        else:
+            log.error("Unknown subcommand. Try: seed | check | list")
+            return 2
     return 0
 
 
@@ -288,6 +333,7 @@ COMMANDS = {
     "backup": cmd_backup,
     "lightsail": cmd_lightsail,
     "credentials": cmd_credentials,
+    "honeytokens": cmd_honeytokens,
 }
 
 
