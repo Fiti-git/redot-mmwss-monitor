@@ -142,7 +142,12 @@ def _fire_alarm(settings, conn, hits: list[dict]) -> None:
     """Send a single Slack alert summarising all tripped honeytokens.
     Dedupe key includes hit IDs so the same set of trips won't re-alert
     every 15 min — but a NEW trip will."""
-    if not getattr(settings, "slack_webhook_url", None):
+    # Slack webhook moved to encrypted DB in Day 2; fall back to env for dev.
+    webhook = (
+        credentials.get(conn, "slack_webhook", settings=settings)
+        or getattr(settings, "slack_webhook_url", None)
+    )
+    if not webhook:
         log.warning("No Slack webhook configured — honeytoken alarm logged only")
         return
 
@@ -180,7 +185,7 @@ def _fire_alarm(settings, conn, hits: list[dict]) -> None:
         footer="_HONEYTOKEN tripwire — investigate before rotating._",
     )
     try:
-        alerts._post_slack(settings.slack_webhook_url, payload)
+        alerts._post_slack(webhook, payload)
         alerts._record(
             conn, zone_id=None, incident_id=None, channel="slack",
             event_type="honeytoken_breach", dedupe_key=dedupe_key, payload=payload,
