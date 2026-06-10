@@ -51,7 +51,7 @@ ThemeData buildRedotTheme({bool dark = false}) {
         borderSide: const BorderSide(color: redotRed, width: 1.6),
       ),
     ),
-    cardTheme: CardTheme(
+    cardTheme: CardThemeData(
       color: dark ? null : Colors.white,
       elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
