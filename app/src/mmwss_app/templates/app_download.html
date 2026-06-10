@@ -1,0 +1,85 @@
+{% extends "_app_shell.html" %}
+{% block title %}Redot Sentinel — Install{% endblock %}
+
+{% block content %}
+<div class="mx-auto max-w-2xl px-4 py-8">
+  <div class="flex items-center gap-4 mb-6">
+    <div class="w-16 h-16 rounded-2xl bg-brand text-white flex items-center justify-center">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-9 h-9">
+        <path d="M12 1l3.6 1.6 4.8 0.4-0.4 4.8 1.6 3.6-3 3.7 0.2 4.8-4.8 0.4-2 4.4-2-4.4-4.8-0.4 0.2-4.8-3-3.7 1.6-3.6-0.4-4.8 4.8-0.4z"/>
+      </svg>
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold text-ink">Redot Sentinel</h1>
+      <p class="text-ink-muted">Internal Android app — sideload only</p>
+    </div>
+  </div>
+
+  {% if available %}
+  <div class="bg-surface border border-line rounded-xl2 p-6 mb-6 shadow-card">
+    <div class="flex items-center justify-between mb-4">
+      <div>
+        <div class="text-xs uppercase tracking-wide text-ink-muted">Latest build</div>
+        <div class="text-lg font-semibold text-ink">v{{ version or '1.0.0' }}</div>
+        {% if built_at %}<div class="text-xs text-ink-subtle">Built {{ built_at }}</div>{% endif %}
+      </div>
+      <a href="{{ base_path }}/app/download/redot-sentinel.apk"
+         class="inline-flex items-center gap-2 bg-brand text-white px-5 py-3 rounded-lg font-semibold hover:bg-brand-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Download APK
+      </a>
+    </div>
+    {% if size_bytes %}
+    <div class="text-sm text-ink-muted">Size: {{ (size_bytes / 1024 / 1024) | round(2) }} MB</div>
+    {% endif %}
+    {% if sha256 %}
+    <div class="mt-2 font-mono text-xs text-ink-subtle break-all">SHA-256: {{ sha256 }}</div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="bg-warn-soft border border-warn rounded-xl2 p-6 mb-6">
+    <div class="font-semibold text-warn-dark">APK not built yet</div>
+    <p class="text-sm text-warn-dark/80 mt-2">
+      Run on the server:
+      <code class="font-mono bg-white/60 px-2 py-1 rounded">bash /srv/mmwss/repo/mobile/redot_sentinel/bootstrap.sh</code>
+    </p>
+  </div>
+  {% endif %}
+
+  <h2 class="text-lg font-semibold text-ink mb-3 mt-8">Install on your phone</h2>
+  <ol class="list-decimal pl-6 space-y-3 text-ink">
+    <li>Open this page on your Android phone (use Chrome).</li>
+    <li>Tap <strong>Download APK</strong> above.</li>
+    <li>When prompted, allow Chrome to install unknown apps:
+      <span class="block text-sm text-ink-muted mt-1">Settings → Apps → Special app access → Install unknown apps → Chrome → Allow</span>
+    </li>
+    <li>Open the downloaded file and tap <strong>Install</strong>.</li>
+    <li>Launch <strong>Redot Sentinel</strong> from your home screen.</li>
+    <li>Sign in with your MMWSS email + password (and 2FA code if enabled).</li>
+    <li>When the app asks for notification permission, tap <strong>Allow</strong>.</li>
+  </ol>
+
+  <h2 class="text-lg font-semibold text-ink mb-3 mt-8">What you'll get</h2>
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    {% for kind, label, sub in [
+        ('priority_high', 'P1 ticket pushes', 'Phone wakes for P1 tickets'),
+        ('shield',        'Honeytoken alerts', 'Instant breach signal'),
+        ('bug_report',    'Critical findings', 'Scanner P1 pushes'),
+        ('description',   'Monthly reports',  'When a new report is ready'),
+        ('dashboard',     'Live dashboard',   'KPIs, uptime, security score'),
+        ('confirmation_num', 'Tickets',       'Browse, comment, acknowledge')
+    ] %}
+    <div class="bg-surface border border-line rounded-lg p-4">
+      <div class="font-semibold text-ink">{{ label }}</div>
+      <div class="text-sm text-ink-muted">{{ sub }}</div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="mt-10 p-4 bg-surface-alt border border-line rounded-lg text-sm text-ink-muted">
+    <strong class="text-ink">Internal use only.</strong>
+    This APK is signed by Redot Global and distributed exclusively to MMWSS engineers.
+    It will refuse to install over a Play Store build with the same package name.
+  </div>
+</div>
+{% endblock %}

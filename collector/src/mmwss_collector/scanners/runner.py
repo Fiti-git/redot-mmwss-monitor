@@ -428,6 +428,23 @@ def run_scan(
                                 )
                             except Exception:
                                 pass    # alerts best-effort
+                            # Push fan-out for critical findings only.
+                            # High/medium go to Slack but don't wake phones.
+                            if decision.final_severity == "critical":
+                                try:
+                                    from .. import fcm as _fcm
+                                    _fcm.send_to_admins(
+                                        conn, settings,
+                                        kind="scanner_critical",
+                                        title=f"CRITICAL: {target.zone_name}",
+                                        body=f"{rf.title[:120]} ({scanner_impl.name})",
+                                        data={"ticket_id": tid, "finding_id": fid,
+                                              "zone_id": target.zone_id,
+                                              "scanner": scanner_impl.name},
+                                        deep_link=f"/tickets/{tid}",
+                                    )
+                                except Exception:
+                                    log.exception("push fan-out failed for finding %d", fid)
             except Exception:
                 log.exception("Failed to persist finding template=%s url=%s",
                               rf.template_id, rf.target_url)

@@ -135,6 +135,25 @@ def check(settings, conn) -> int:
     except Exception:
         log.exception("Failed to fire Slack alarm for honeytoken — STILL A BREACH SIGNAL")
 
+    # Push to every admin's phone. Best-effort — Slack is the primary channel.
+    try:
+        from . import fcm
+        first = hits[0]
+        body = (f"{first['kind']}/{first['label']} used at {first['last_used_at']}"
+                if len(hits) == 1 else
+                f"{len(hits)} honeytokens tripped — see Slack for full list")
+        fcm.send_to_admins(
+            conn, settings,
+            kind="honeytoken",
+            title="HONEYTOKEN BREACH",
+            body=body,
+            data={"hit_count": len(hits),
+                  "first_kind": first["kind"], "first_label": first["label"]},
+            deep_link="/credentials",
+        )
+    except Exception:
+        log.exception("Failed to fan-out push for honeytoken breach")
+
     return len(hits)
 
 

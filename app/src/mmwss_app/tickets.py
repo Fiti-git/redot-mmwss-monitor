@@ -5,10 +5,13 @@ changing so they get their own module.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from . import db, sla
+
+log = logging.getLogger(__name__)
 
 
 def list_tickets(
@@ -135,6 +138,23 @@ def create_ticket(
                  json.dumps({"priority": priority, "category": category, "source": source})),
             )
         c.commit()
+
+    # Fan-out push for P1 tickets. Best-effort — never let a failed push
+    # roll back the ticket. Lazy import so test runs without firebase-admin
+    # don't break ticket creation.
+    if priority == "p1":
+        try:
+            from . import fcm
+            fcm.send_to_admins(
+                kind="p1_ticket",
+                title=f"P1 ticket #{ticket_id}",
+                body=title.strip()[:160],
+                data={"ticket_id": ticket_id, "category": category},
+                deep_link=f"/tickets/{ticket_id}",
+            )
+        except Exception:
+            log.exception("Failed to send P1 push for ticket %d", ticket_id)
+
     return ticket_id
 
 

@@ -18,8 +18,10 @@ from . import auth, filters, security
 from .config import get_settings
 from .routes import (
     api_routes,
+    app_download_routes,
     auth_routes,
     change_log_routes,
+    mobile_api_routes,
     origin_health_routes,
     pages,
     scanner_routes,
@@ -87,6 +89,11 @@ scanner_routes.templates = templates
 app.include_router(scanner_routes.router, prefix=BASE_PATH)
 origin_health_routes.templates = templates
 app.include_router(origin_health_routes.router, prefix=BASE_PATH)
+# Redot Sentinel mobile-app API (JSON, bearer-token auth) — v1
+app.include_router(mobile_api_routes.router, prefix=f"{BASE_PATH}/api/v1")
+# /mmwss/app/download — install instructions + signed APK
+app_download_routes.templates = templates
+app.include_router(app_download_routes.router, prefix=BASE_PATH)
 
 
 @app.get("/healthz")

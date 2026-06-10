@@ -813,6 +813,20 @@ def generate_report(settings: Settings, conn, kind: str) -> int:
         except Exception:
             log.exception("Failed to post report announcement to Slack")
 
+    # Push fan-out — phones buzz when a report is ready.
+    try:
+        from . import fcm
+        fcm.send_to_admins(
+            conn, settings,
+            kind="report_ready",
+            title=f"{kind.title()} report ready",
+            body=f"{period_label} — open in Redot Sentinel",
+            data={"report_id": report_id, "kind": kind},
+            deep_link=f"/reports/{report_id}",
+        )
+    except Exception:
+        log.exception("Failed to fan-out push for report %d", report_id)
+
     return report_id
 
 

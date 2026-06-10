@@ -1,0 +1,37 @@
+name: redot_sentinel
+description: Redot Sentinel — MMWSS monitoring app for the internal team.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.2
+  shared_preferences: ^2.3.2
+  firebase_core: ^3.6.0
+  firebase_messaging: ^15.1.3
+  flutter_local_notifications: ^17.2.3
+  intl: ^0.19.0
+  package_info_plus: ^8.0.2
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/redot-icon.png
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: false
+  image_path: "assets/redot-icon.png"
+  adaptive_icon_background: "#E11E27"
+  adaptive_icon_foreground: "assets/redot-icon-foreground.png"
+  min_sdk_android: 23

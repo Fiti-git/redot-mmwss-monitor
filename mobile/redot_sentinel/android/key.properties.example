@@ -1,0 +1,6 @@
+# Copy to android/key.properties and fill in your keystore credentials.
+# `bootstrap.sh` will create the keystore for you the first time it runs.
+storePassword=CHANGE_ME
+keyPassword=CHANGE_ME
+keyAlias=redot-sentinel
+storeFile=upload-keystore.jks
