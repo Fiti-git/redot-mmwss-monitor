@@ -42,11 +42,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-              child: Text(_name == null ? 'Dashboard' : 'Hello, ${_name!.split(' ').first}',
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
-            ),
+            if (_name != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                child: Text('Hello, ${_name!.split(' ').first}',
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600,
+                        color: redotMuted)),
+              ),
             const SizedBox(height: 8),
             FutureBuilder<DashboardData>(
               future: _future,

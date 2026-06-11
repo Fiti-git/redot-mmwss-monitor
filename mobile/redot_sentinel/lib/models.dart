@@ -130,6 +130,175 @@ class TicketEvent {
   );
 }
 
+class Incident {
+  final int id;
+  final int? zoneId;
+  final String? zoneName;
+  final String type;
+  final String severity;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final String? summary;
+  final bool isOpen;
+  Incident({
+    required this.id, required this.zoneId, required this.zoneName,
+    required this.type, required this.severity,
+    required this.startedAt, required this.endedAt, required this.summary,
+    required this.isOpen,
+  });
+  factory Incident.fromJson(Map<String, dynamic> j) => Incident(
+    id: j['id'] as int,
+    zoneId: j['zone_id'] as int?,
+    zoneName: j['zone_name'] as String?,
+    type: j['type'] as String,
+    severity: j['severity'] as String,
+    startedAt: DateTime.parse(j['started_at'] as String),
+    endedAt: j['ended_at'] != null ? DateTime.parse(j['ended_at'] as String) : null,
+    summary: j['summary'] as String?,
+    isOpen: (j['is_open'] ?? false) as bool,
+  );
+}
+
+class IncidentDetail extends Incident {
+  final int? ticketId;
+  final String? ticketStatus;
+  final String? ticketPriority;
+  IncidentDetail({
+    required super.id, required super.zoneId, required super.zoneName,
+    required super.type, required super.severity,
+    required super.startedAt, required super.endedAt, required super.summary,
+    required super.isOpen,
+    required this.ticketId, required this.ticketStatus, required this.ticketPriority,
+  });
+  factory IncidentDetail.fromJson(Map<String, dynamic> j) => IncidentDetail(
+    id: j['id'] as int,
+    zoneId: j['zone_id'] as int?,
+    zoneName: j['zone_name'] as String?,
+    type: j['type'] as String,
+    severity: j['severity'] as String,
+    startedAt: DateTime.parse(j['started_at'] as String),
+    endedAt: j['ended_at'] != null ? DateTime.parse(j['ended_at'] as String) : null,
+    summary: j['summary'] as String?,
+    isOpen: (j['is_open'] ?? false) as bool,
+    ticketId: j['ticket_id'] as int?,
+    ticketStatus: j['ticket_status'] as String?,
+    ticketPriority: j['ticket_priority'] as String?,
+  );
+}
+
+class OriginHealthZone {
+  final int zoneId;
+  final String zoneName;
+  final int checks24h;
+  final int ok24h;
+  final double? uptimePct24h;
+  final double? avgLatencyMs;
+  final bool? latestOk;
+  final int? latestStatus;
+  final Map<String, dynamic> aws;
+  OriginHealthZone({
+    required this.zoneId, required this.zoneName,
+    required this.checks24h, required this.ok24h,
+    required this.uptimePct24h, required this.avgLatencyMs,
+    required this.latestOk, required this.latestStatus, required this.aws,
+  });
+  factory OriginHealthZone.fromJson(Map<String, dynamic> j) => OriginHealthZone(
+    zoneId: j['zone_id'] as int,
+    zoneName: j['zone_name'] as String,
+    checks24h: (j['checks_24h'] ?? 0) as int,
+    ok24h: (j['ok_24h'] ?? 0) as int,
+    uptimePct24h: j['uptime_pct_24h'] == null ? null : (j['uptime_pct_24h'] as num).toDouble(),
+    avgLatencyMs: j['avg_latency_ms'] == null ? null : (j['avg_latency_ms'] as num).toDouble(),
+    latestOk: j['latest_ok'] as bool?,
+    latestStatus: j['latest_status'] as int?,
+    aws: Map<String, dynamic>.from(j['aws'] as Map),
+  );
+}
+
+class Finding {
+  final int id;
+  final String title;
+  final String severity;
+  final String status;
+  final int? zoneId;
+  final String? zoneName;
+  final DateTime? discoveredAt;
+  final String? cve;
+  final int? linkedTicketId;
+  final String? linkedTicketStatus;
+  Finding({
+    required this.id, required this.title, required this.severity, required this.status,
+    required this.zoneId, required this.zoneName, required this.discoveredAt,
+    required this.cve, required this.linkedTicketId, required this.linkedTicketStatus,
+  });
+  factory Finding.fromJson(Map<String, dynamic> j) => Finding(
+    id: j['id'] as int,
+    title: j['title'] as String,
+    severity: j['severity'] as String,
+    status: j['status'] as String,
+    zoneId: j['zone_id'] as int?,
+    zoneName: j['zone_name'] as String?,
+    discoveredAt: j['discovered_at'] != null ? DateTime.parse(j['discovered_at'] as String) : null,
+    cve: j['cve_reference'] as String?,
+    linkedTicketId: j['linked_ticket_id'] as int?,
+    linkedTicketStatus: j['linked_ticket_status'] as String?,
+  );
+}
+
+class FindingDetail extends Finding {
+  final String? description;
+  final String? reportTitle;
+  final String? vendor;
+  final DateTime? remediatedAt;
+  final DateTime? verifiedAt;
+  final String? vendorFindingId;
+  FindingDetail({
+    required super.id, required super.title, required super.severity, required super.status,
+    required super.zoneId, required super.zoneName, required super.discoveredAt,
+    required super.cve, required super.linkedTicketId, required super.linkedTicketStatus,
+    required this.description, required this.reportTitle, required this.vendor,
+    required this.remediatedAt, required this.verifiedAt, required this.vendorFindingId,
+  });
+  factory FindingDetail.fromJson(Map<String, dynamic> j) => FindingDetail(
+    id: j['id'] as int,
+    title: j['title'] as String,
+    severity: j['severity'] as String,
+    status: j['status'] as String,
+    zoneId: j['zone_id'] as int?,
+    zoneName: j['zone_name'] as String?,
+    discoveredAt: j['discovered_at'] != null ? DateTime.parse(j['discovered_at'] as String) : null,
+    cve: j['cve_reference'] as String?,
+    linkedTicketId: j['linked_ticket_id'] as int?,
+    linkedTicketStatus: j['linked_ticket_status'] as String?,
+    description: j['description'] as String?,
+    reportTitle: j['report_title'] as String?,
+    vendor: j['vendor'] as String?,
+    remediatedAt: j['remediated_at'] != null ? DateTime.parse(j['remediated_at'] as String) : null,
+    verifiedAt: j['verified_at'] != null ? DateTime.parse(j['verified_at'] as String) : null,
+    vendorFindingId: j['vendor_finding_id'] as String?,
+  );
+}
+
+class PushPreferences {
+  bool notifyP1;
+  bool notifyScannerCritical;
+  bool notifyHoneytoken;
+  bool notifyReportReady;
+  bool notifySlaWarning;
+  PushPreferences({
+    required this.notifyP1, required this.notifyScannerCritical,
+    required this.notifyHoneytoken, required this.notifyReportReady,
+    required this.notifySlaWarning,
+  });
+  factory PushPreferences.fromJson(Map<String, dynamic> j) => PushPreferences(
+    notifyP1: (j['notify_p1'] ?? true) as bool,
+    notifyScannerCritical: (j['notify_scanner_critical'] ?? true) as bool,
+    notifyHoneytoken: (j['notify_honeytoken'] ?? true) as bool,
+    notifyReportReady: (j['notify_report_ready'] ?? true) as bool,
+    notifySlaWarning: (j['notify_sla_warning'] ?? true) as bool,
+  );
+}
+
 class TicketDetail {
   final Ticket ticket;
   final String? description;

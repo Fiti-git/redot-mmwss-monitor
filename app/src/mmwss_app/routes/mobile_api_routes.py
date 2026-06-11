@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .. import auth, db, fcm, mobile_auth, queries, security, tickets
+from .. import auth, db, fcm, mobile_auth, queries, security, tickets, vapt
 
 router = APIRouter()
 
@@ -311,6 +311,159 @@ def mobile_ticket_comment(
     return {"ok": True}
 
 
+# ─────────── Incidents ───────────
+
+
+@router.get("/incidents")
+def mobile_incidents(
+    _u: dict = Depends(mobile_auth.require_mobile_user),
+    limit: int = 100,
+    open_only: bool = False,
+):
+    rows = queries.recent_incidents(limit=limit)
+    if open_only:
+        rows = [r for r in rows if r.get("ended_at") is None]
+    return {
+        "incidents": [
+            {
+                "id": int(r["id"]),
+                "zone_id": r.get("zone_id"),
+                "zone_name": r.get("zone_name"),
+                "type": r["type"],
+                "severity": r["severity"],
+                "started_at": r["started_at"],
+                "ended_at": r.get("ended_at"),
+                "summary": r.get("summary"),
+                "is_open": r.get("ended_at") is None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/incidents/{incident_id}")
+def mobile_incident_detail(incident_id: int, _u: dict = Depends(mobile_auth.require_mobile_user)):
+    row = db.fetch_one(
+        """
+        SELECT i.id, i.zone_id, z.name AS zone_name, i.type, i.severity,
+               i.started_at, i.ended_at, i.summary,
+               t.id AS ticket_id, t.status AS ticket_status, t.priority AS ticket_priority
+          FROM mmwss.incidents i
+          JOIN mmwss.zones z ON z.id = i.zone_id
+          LEFT JOIN mmwss.tickets t ON t.incident_id = i.id
+         WHERE i.id = %s
+        """,
+        (incident_id,),
+    )
+    if not row:
+        raise HTTPException(404, "Incident not found")
+    return {
+        "id": int(row["id"]),
+        "zone_id": row.get("zone_id"),
+        "zone_name": row.get("zone_name"),
+        "type": row["type"],
+        "severity": row["severity"],
+        "started_at": row["started_at"],
+        "ended_at": row.get("ended_at"),
+        "summary": row.get("summary"),
+        "is_open": row.get("ended_at") is None,
+        "ticket_id": row.get("ticket_id"),
+        "ticket_status": row.get("ticket_status"),
+        "ticket_priority": row.get("ticket_priority"),
+    }
+
+
+# ─────────── Origin health ───────────
+
+
+@router.get("/origin-health")
+def mobile_origin_health(_u: dict = Depends(mobile_auth.require_mobile_user)):
+    rows = queries.uptime_summary_all()
+    items = []
+    for r in rows:
+        total = r.get("total") or 0
+        ok = r.get("ok") or 0
+        pct = (ok / total * 100) if total else None
+        items.append({
+            "zone_id": int(r["id"]),
+            "zone_name": r["name"],
+            "checks_24h": total,
+            "ok_24h": ok,
+            "uptime_pct_24h": pct,
+            "avg_latency_ms": float(r["avg_latency"]) if r.get("avg_latency") is not None else None,
+            "latest_ok": r.get("latest_ok"),
+            "latest_status": r.get("latest_status"),
+            "aws": {
+                "instance": r.get("aws_instance"),
+                "bundle": r.get("aws_bundle"),
+                "ram_gb": r.get("aws_ram_gb"),
+                "state": r.get("aws_state"),
+                "cpu_avg": float(r["aws_cpu_avg"]) if r.get("aws_cpu_avg") is not None else None,
+                "cpu_max": float(r["aws_cpu_max"]) if r.get("aws_cpu_max") is not None else None,
+                "burst_pct": float(r["aws_burst_pct"]) if r.get("aws_burst_pct") is not None else None,
+                "status_failed": r.get("aws_status_failed"),
+                "metric_hour": r.get("aws_metric_hour"),
+            },
+        })
+    return {"zones": items}
+
+
+# ─────────── Scanner findings ───────────
+
+
+@router.get("/findings")
+def mobile_findings_list(
+    _u: dict = Depends(mobile_auth.require_mobile_user),
+    severity: str | None = None,
+    status_filter: str | None = None,
+    zone_id: int | None = None,
+):
+    rows = vapt.list_findings(severity=severity, status=status_filter, zone_id=zone_id)
+    return {
+        "findings": [
+            {
+                "id": int(r["id"]),
+                "title": r["title"],
+                "severity": r["severity"],
+                "status": r["status"],
+                "zone_id": r.get("zone_id"),
+                "zone_name": r.get("zone_name"),
+                "discovered_at": r.get("discovered_at"),
+                "cve_reference": r.get("cve_reference"),
+                "linked_ticket_id": r.get("linked_ticket_id"),
+                "linked_ticket_status": r.get("linked_ticket_status"),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/findings/{finding_id}")
+def mobile_finding_detail(finding_id: int, _u: dict = Depends(mobile_auth.require_mobile_user)):
+    f = vapt.get_finding(finding_id)
+    if not f:
+        raise HTTPException(404, "Finding not found")
+    return {
+        "id": int(f["id"]),
+        "title": f["title"],
+        "severity": f["severity"],
+        "status": f["status"],
+        "description": f.get("description"),
+        "zone_id": f.get("zone_id"),
+        "zone_name": f.get("zone_name"),
+        "report_title": f.get("report_title"),
+        "report_date": f.get("report_date"),
+        "vendor": f.get("vendor"),
+        "discovered_at": f.get("discovered_at"),
+        "remediated_at": f.get("remediated_at"),
+        "verified_at": f.get("verified_at"),
+        "cve_reference": f.get("cve_reference"),
+        "vendor_finding_id": f.get("vendor_finding_id"),
+        "linked_ticket_id": f.get("linked_ticket_id"),
+        "linked_ticket_status": f.get("linked_ticket_status"),
+    }
+
+
 # ─────────── Push subscriptions ───────────
 
 
@@ -392,6 +545,61 @@ def mobile_push_test(u: dict = Depends(mobile_auth.require_mobile_user)):
     except RuntimeError as e:
         raise HTTPException(503, str(e))
     return {"sent": n}
+
+
+# ─────────── Per-device notification preferences ───────────
+
+
+class PushPreferencesIn(BaseModel):
+    fcm_token: str = Field(..., min_length=20, max_length=400)
+    notify_p1: bool | None = None
+    notify_scanner_critical: bool | None = None
+    notify_honeytoken: bool | None = None
+    notify_report_ready: bool | None = None
+    notify_sla_warning: bool | None = None
+
+
+@router.get("/push/preferences")
+def mobile_push_preferences_get(
+    fcm_token: str,
+    u: dict = Depends(mobile_auth.require_mobile_user),
+):
+    row = db.fetch_one(
+        """
+        SELECT notify_p1, notify_scanner_critical, notify_honeytoken,
+               notify_report_ready, notify_sla_warning, is_active, device_label
+          FROM mmwss.push_subscriptions
+         WHERE user_id = %s AND fcm_token = %s
+        """,
+        (u["id"], fcm_token),
+    )
+    if not row:
+        raise HTTPException(404, "Subscription not found for this device")
+    return row
+
+
+@router.post("/push/preferences")
+def mobile_push_preferences_set(
+    payload: PushPreferencesIn,
+    u: dict = Depends(mobile_auth.require_mobile_user),
+):
+    sets, params = [], []
+    for col in ("notify_p1", "notify_scanner_critical", "notify_honeytoken",
+                "notify_report_ready", "notify_sla_warning"):
+        v = getattr(payload, col)
+        if v is not None:
+            sets.append(f"{col} = %s")
+            params.append(v)
+    if not sets:
+        return {"ok": True, "updated": 0}
+    params.extend([u["id"], payload.fcm_token])
+    sql = f"""
+        UPDATE mmwss.push_subscriptions
+           SET {', '.join(sets)}
+         WHERE user_id = %s AND fcm_token = %s
+    """
+    db.execute(sql, tuple(params))
+    return {"ok": True}
 
 
 # ─────────── Heartbeat (lets app refresh last_used_at) ───────────

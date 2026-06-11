@@ -34,9 +34,8 @@ class _TicketsListScreenState extends State<TicketsListScreen> {
   Widget build(BuildContext context) {
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
         child: Row(children: [
-          const Text('Tickets', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700)),
           const Spacer(),
           PopupMenuButton<String>(
             tooltip: 'Filter',

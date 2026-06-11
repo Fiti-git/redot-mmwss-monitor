@@ -21,6 +21,17 @@ class Push {
   static final _local = FlutterLocalNotificationsPlugin();
   static String? _lastToken;
 
+  static String? get currentToken => _lastToken;
+
+  /// Lookup-on-demand: returns the FCM token for this device (cached or fresh).
+  static Future<String?> getToken() async {
+    if (_lastToken != null) return _lastToken;
+    try {
+      _lastToken = await FirebaseMessaging.instance.getToken();
+    } catch (_) {/* permissions not yet granted, etc. */}
+    return _lastToken;
+  }
+
   /// Called from main() at app boot. Sets up the background isolate handler
   /// + the local notifications channel.
   static Future<void> initBackground() async {

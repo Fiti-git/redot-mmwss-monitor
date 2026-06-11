@@ -166,6 +166,71 @@ class Api {
     final j = await _post('/push/test', {});
     return (j['sent'] ?? 0) as int;
   }
+
+  Future<PushPreferences> pushPreferencesGet(String fcmToken) async {
+    final j = await _get('/push/preferences?fcm_token=${Uri.encodeQueryComponent(fcmToken)}');
+    return PushPreferences.fromJson(j);
+  }
+
+  Future<void> pushPreferencesSet({
+    required String fcmToken,
+    bool? notifyP1,
+    bool? notifyScannerCritical,
+    bool? notifyHoneytoken,
+    bool? notifyReportReady,
+    bool? notifySlaWarning,
+  }) async {
+    await _post('/push/preferences', {
+      'fcm_token': fcmToken,
+      if (notifyP1 != null) 'notify_p1': notifyP1,
+      if (notifyScannerCritical != null) 'notify_scanner_critical': notifyScannerCritical,
+      if (notifyHoneytoken != null) 'notify_honeytoken': notifyHoneytoken,
+      if (notifyReportReady != null) 'notify_report_ready': notifyReportReady,
+      if (notifySlaWarning != null) 'notify_sla_warning': notifySlaWarning,
+    });
+  }
+
+  // ── incidents ──
+
+  Future<List<Incident>> incidents({bool openOnly = false}) async {
+    final j = await _get('/incidents${openOnly ? "?open_only=true" : ""}');
+    return ((j['incidents'] as List?) ?? [])
+        .map((e) => Incident.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<IncidentDetail> incident(int id) async {
+    final j = await _get('/incidents/$id');
+    return IncidentDetail.fromJson(j);
+  }
+
+  // ── origin health ──
+
+  Future<List<OriginHealthZone>> originHealth() async {
+    final j = await _get('/origin-health');
+    return ((j['zones'] as List?) ?? [])
+        .map((e) => OriginHealthZone.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  // ── findings ──
+
+  Future<List<Finding>> findings({String? severity, String? status, int? zoneId}) async {
+    final q = <String, String>{};
+    if (severity != null) q['severity'] = severity;
+    if (status != null) q['status_filter'] = status;
+    if (zoneId != null) q['zone_id'] = zoneId.toString();
+    final qs = q.isEmpty ? '' : '?${q.entries.map((e) => '${e.key}=${Uri.encodeQueryComponent(e.value)}').join('&')}';
+    final j = await _get('/findings$qs');
+    return ((j['findings'] as List?) ?? [])
+        .map((e) => Finding.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<FindingDetail> finding(int id) async {
+    final j = await _get('/findings/$id');
+    return FindingDetail.fromJson(j);
+  }
 }
 
 class ApiError implements Exception {
