@@ -122,8 +122,12 @@ def cmd_scheduler(settings) -> int:
                   CronTrigger(day_of_week="tue", hour=18, minute=0), id="scan_wpscan", max_instances=1, coalesce=True)
     sched.add_job(_wrap(scan_jobs.run_testssl, settings, "scan_testssl"),
                   CronTrigger(day_of_week="wed", hour=18, minute=0), id="scan_testssl", max_instances=1, coalesce=True)
-    sched.add_job(_wrap(scan_jobs.run_zap, settings, "scan_zap"),
-                  CronTrigger(day_of_week="thu", hour=18, minute=0), id="scan_zap", max_instances=1, coalesce=True)
+    # ZAP scheduling is gated on the ZAP_URL setting. The ZAP container was
+    # disabled in compose on 2026-06-10 (disk-pressure on the EC2 root volume)
+    # so its env var is empty and the job is skipped.
+    if getattr(settings, "zap_url", "") and getattr(settings, "zap_url", "").strip():
+        sched.add_job(_wrap(scan_jobs.run_zap, settings, "scan_zap"),
+                      CronTrigger(day_of_week="thu", hour=18, minute=0), id="scan_zap", max_instances=1, coalesce=True)
 
     # ───── Honeytoken tripwire — every 15 min ─────
     sched.add_job(_wrap(honeytokens.check, settings, "honeytoken_check"),
