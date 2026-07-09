@@ -22,6 +22,7 @@ KINDS — agreed taxonomy across the codebase:
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any
@@ -43,6 +44,10 @@ def get(conn, kind: str, label: str = "primary", *, settings) -> str | None:
     """Return the plaintext secret. Env override > encrypted DB > None.
 
     Side effect: increments use_count + last_used_at on DB read.
+
+    Honeytokens are NEVER returned in plaintext — the tripwire fires and
+    the caller gets None. This prevents an attacker who lands on the host
+    from probing which credentials are fake by observing which ones work.
     """
     env_name = _env_name_for(kind, label)
     if env_name and os.environ.get(env_name):
@@ -67,16 +72,39 @@ def get(conn, kind: str, label: str = "primary", *, settings) -> str | None:
     if not row:
         return None
 
-    # Honeytoken tripwire — should NEVER be returned in normal operation.
-    # Log this loudly so operators see it and so alerting can pick it up.
     if row["is_honeytoken"]:
         log.critical(
-            "🚨 HONEYTOKEN USED — credential id=%d kind=%s label=%s. "
+            "HONEYTOKEN USED — credential id=%d kind=%s label=%s. "
             "This indicates a SECURITY BREACH. Investigate immediately.",
             row["id"], kind, label,
         )
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO mmwss.audit_log (action, target_type, target_id, details_json)
+                    VALUES ('honeytoken_read', 'credential', %s, %s::jsonb)
+                    """,
+                    (str(row["id"]),
+                     json.dumps({"kind": kind, "label": label,
+                                 "caller": _caller_hint()})),
+                )
+            conn.commit()
+        except Exception:
+            log.exception("Failed to write honeytoken_read audit entry")
+        return None
 
     return row["plaintext"]
+
+
+def _caller_hint() -> str:
+    """Best-effort caller identification for audit trail."""
+    import traceback
+    frames = traceback.extract_stack()[:-2]
+    for frame in reversed(frames):
+        if "credentials.py" not in frame.filename:
+            return f"{frame.filename}:{frame.lineno} in {frame.name}"
+    return "unknown"
 
 
 def set(conn, kind: str, label: str, value: str, *, settings,
@@ -86,7 +114,6 @@ def set(conn, kind: str, label: str, value: str, *, settings,
     Replacing creates a NEW row (history retained); the previous one is
     marked is_active=FALSE and `rotated_from_id` points back to it.
     """
-    import json
     last_4 = (value or "")[-4:] if value else None
 
     with conn.cursor() as cur:
